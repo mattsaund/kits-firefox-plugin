@@ -17,3 +17,13 @@ jobs:
       - run: npm ci
       - run: npm test
       - run: npx web-ext lint --source-dir extension --self-hosted
+
+  # The helper's Windows side: install.ps1, the registry entry, the .bat
+  # launcher and profile detection, exercised the way Firefox uses them.
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - run: python --version
+      - run: python -m unittest discover -s tests -p "test_*.py" -v
+      - run: python tests/windows_install_check.py

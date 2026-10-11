@@ -27,7 +27,7 @@ case "$(uname -s)" in
     MANIFEST_DIR="$HOME/.mozilla/native-messaging-hosts"
     ;;
   *)
-    echo "Unsupported platform: $(uname -s). macOS and Linux only for now." >&2
+    echo "Unsupported platform: $(uname -s). On Windows, use install.ps1 (see the README)." >&2
     exit 1
     ;;
 esac

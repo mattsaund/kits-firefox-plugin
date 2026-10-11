@@ -26,7 +26,18 @@ concurrency:
   group: release-${{ github.ref }}
 
 jobs:
+  # The Windows installer and helper, end to end, before anything is published.
+  windows:
+    runs-on: windows-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - run: python -m unittest discover -s tests -p "test_*.py"
+      - run: python tests/windows_install_check.py
+
   release:
+    needs: windows
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -81,7 +92,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ steps.version.outputs.version }}
         run: |
-          files="dist/kits-firefox-plugin-$VERSION.xpi native-host/install.sh native-host/autohide_tab_bar_host.py"
+          files="dist/kits-firefox-plugin-$VERSION.xpi native-host/install.sh native-host/install.ps1 native-host/autohide_tab_bar_host.py"
           if gh release view "v$VERSION" >/dev/null 2>&1; then
             gh release upload "v$VERSION" $files --clobber
             gh release edit "v$VERSION" --notes-file notes.md

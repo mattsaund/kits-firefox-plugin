@@ -32,8 +32,11 @@ const SIDEBAR_MENUS = [
 // itself there) and in Customize mode (the tab strip must stay editable).
 const HGUARD = ":root:not([inFullscreen], [customizing])";
 
-// Room for the macOS traffic lights when the top bar slides over the nav bar.
+// Room for the window controls when the top bar slides over the nav bar: the
+// macOS traffic lights at the start, Windows' minimize/maximize/close (three
+// 46px caption buttons) at the end.
 const MAC_WINDOW_CONTROLS = "76px";
+const WINDOWS_WINDOW_CONTROLS = "138px";
 
 const SHADOW_ON = "drop-shadow(0 0 12px rgba(0, 0, 0, 0.45))";
 const SHADOW_OFF = "drop-shadow(0 0 0 rgba(0, 0, 0, 0))";
@@ -299,9 +302,13 @@ ${rule(T, [
   "margin-bottom: calc(-1 * var(--ahtb-trigger))",
 ])}`);
     if (s.overlay) {
-      blocks.push(`/* Sliding over the nav bar: clear the macOS traffic lights. */
+      blocks.push(`/* Sliding over the nav bar: clear the window controls. */
 @media (-moz-platform: macos) {
 ${indent(rule(`${HGUARD}[customtitlebar] #TabsToolbar`, [`padding-inline-start: ${MAC_WINDOW_CONTROLS}`]))}
+}
+
+@media (-moz-platform: windows) {
+${indent(rule(`${HGUARD}[customtitlebar] #TabsToolbar`, [`padding-inline-end: ${WINDOWS_WINDOW_CONTROLS}`]))}
 }`);
     }
   } else {
@@ -453,6 +460,8 @@ function toolbarRules(s) {
     `:has(${inRows}:focus-within)`,
     // Address bar results, toolbar button panels and menus mark themselves [open].
     `:has(${inRows} [open]:not([open="false"]))`,
+    // Windows and Linux: the menu bar Alt brings up (an auto-hiding one drops [inactive]).
+    ':has(#toolbar-menubar[autohide="true"]:not([inactive]))',
     ...(top ? [":has(#tabbrowser-tabs[movingtab])", ":has(tab-group[movingtabgroup])"] : []),
   ];
   const outside = [

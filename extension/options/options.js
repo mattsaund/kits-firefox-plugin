@@ -3,7 +3,17 @@ import { generateCss } from "../shared/generate-css.js";
 import { REPO, compareVersions, currentVersion, storedUpdate } from "../shared/updates.js";
 
 const HOST = "autohide_tab_bar";
-const INSTALL_COMMAND = `curl -fsSL https://github.com/${REPO}/releases/latest/download/install.sh | sh`;
+const DOWNLOAD = `https://github.com/${REPO}/releases/latest/download`;
+const INSTALL_COMMANDS = {
+  posix: `curl -fsSL ${DOWNLOAD}/install.sh | sh`,
+  win: `irm ${DOWNLOAD}/install.ps1 | iex`,
+};
+// Set from runtime.getPlatformInfo() in init().
+let onWindows = false;
+
+function installCommand() {
+  return onWindows ? INSTALL_COMMANDS.win : INSTALL_COMMANDS.posix;
+}
 // Matches the default "Match Firefox's tab height" closely enough for the preview.
 const PREVIEW_AUTO_HEIGHT = 44;
 const MAC_WINDOW_CONTROLS = 76;
@@ -315,9 +325,8 @@ function status(kind, ...children) {
 }
 
 function quitHint() {
-  return hostStatus?.platform === "Darwin"
-    ? "Quit Firefox completely (⌘Q) and open it again."
-    : "Quit Firefox completely (Menu → Quit) and open it again.";
+  const how = { Darwin: "⌘Q", Windows: "Menu → Exit" }[hostStatus?.platform] ?? "Menu → Quit";
+  return `Quit Firefox completely (${how}) and open it again.`;
 }
 
 // Firefox restores the sidebar's own collapsed/expanded mode from the session,
@@ -405,7 +414,7 @@ function stateMessages() {
       status(
         "warn",
         h("p", {}, `The helper is from version ${st.version}. Update it by running the install command again:`),
-        h("pre", { class: "code" }, INSTALL_COMMAND),
+        h("pre", { class: "code" }, installCommand()),
       ),
     );
   }
@@ -463,8 +472,8 @@ function renderHelper() {
       status(
         "warn",
         h("p", {}, "The helper isn't installed yet."),
-        h("p", { class: "sub" }, "Firefox only lets extensions change its tab bar through a small helper program. Install it once by running this in a terminal:"),
-        h("pre", { class: "code" }, INSTALL_COMMAND),
+        h("p", { class: "sub" }, `Firefox only lets extensions change its tab bar through a small helper program. Install it once by running this in ${onWindows ? "PowerShell" : "a terminal"}:`),
+        h("pre", { class: "code" }, installCommand()),
         h("p", { class: "sub" }, "Or use the manual install below."),
       ),
     );
@@ -584,6 +593,7 @@ document.addEventListener("visibilitychange", () => {
 async function init() {
   setupControls();
   document.getElementById("version").textContent = currentVersion();
+  onWindows = (await browser.runtime.getPlatformInfo()).os === "win";
   renderUpdate();
   const stored = await browser.storage.local.get(["settings", "profileOverride"]);
   settings = sanitize(stored.settings ?? {});

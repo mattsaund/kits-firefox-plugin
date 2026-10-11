@@ -3,6 +3,19 @@
 Each version is a `v` tag, with the extension and helper on its
 [release page](https://github.com/mattsaund/kits-firefox-plugin/releases).
 
+## 0.2.0 — 2026-10-11
+
+- **Windows.** A PowerShell one-liner installs the helper and registers it
+  with Firefox; `-Uninstall` removes it. The helper finds your Firefox
+  profiles and tells which one is running.
+- With the tab bar sliding over the toolbar at the top, it now stays clear of
+  the Windows minimize, maximize and close buttons.
+- An auto-hidden toolbar opens while the Alt menu bar is showing.
+- The settings page shows the right install command and quit shortcut for
+  your system.
+- After updating the extension, run the install command again to update the
+  helper. The settings page reminds you.
+
 ## 0.1.0 — 2026-10-11
 
 First release.

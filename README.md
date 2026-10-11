@@ -6,10 +6,18 @@ color and speed set from a settings page inside Firefox, with a live preview.
 
 ## Install
 
-**1. Helper** (macOS, Linux)
+**1. Helper.** Needs Python 3.8+.
+
+macOS, Linux:
 
 ```sh
 curl -fsSL https://github.com/mattsaund/kits-firefox-plugin/releases/latest/download/install.sh | sh
+```
+
+Windows (PowerShell):
+
+```powershell
+irm https://github.com/mattsaund/kits-firefox-plugin/releases/latest/download/install.ps1 | iex
 ```
 
 **2. Extension.** Download the `.xpi` from the
@@ -40,6 +48,10 @@ never edit files.
 
 ```sh
 curl -fsSL https://github.com/mattsaund/kits-firefox-plugin/releases/latest/download/install.sh | sh -s -- --uninstall
+```
+
+```powershell
+& ([scriptblock]::Create((irm https://github.com/mattsaund/kits-firefox-plugin/releases/latest/download/install.ps1))) -Uninstall
 ```
 
 ## Contributing

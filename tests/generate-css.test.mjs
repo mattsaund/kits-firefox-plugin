@@ -264,3 +264,14 @@ test("release versions compare numerically", async () => {
   assert.equal(compareVersions("0.2.0", "0.10.0"), -1);
   assert.equal(compareVersions("1.0.0", "1.0.0"), 0);
 });
+
+test("top overlay clears the window controls on macOS and Windows", () => {
+  const css = generateCss({ ...defaults(), position: "top" });
+  assert.match(css, /@media \(-moz-platform: macos\) \{\n  [^}]*padding-inline-start: 76px !important;/);
+  assert.match(css, /@media \(-moz-platform: windows\) \{\n  [^}]*padding-inline-end: 138px !important;/);
+});
+
+test("an auto-hidden toolbar opens for the Alt menu bar", () => {
+  const css = generateCss({ ...defaults(), toolbarAutoHide: true });
+  assert.ok(css.includes('#navigator-toolbox:has(#toolbar-menubar[autohide="true"]:not([inactive]))'));
+});

@@ -11,6 +11,7 @@ import unittest
 HERE = os.path.dirname(os.path.abspath(__file__))
 HOST_PATH = os.path.join(HERE, "..", "native-host", "autohide_tab_bar_host.py")
 sys.path.insert(0, os.path.dirname(HOST_PATH))
+sys.path.insert(0, HERE)
 
 import autohide_tab_bar_host as host  # noqa: E402
 
@@ -188,12 +189,47 @@ class Profiles(unittest.TestCase):
                 host.handle(msg, ctx)
 
 
+@unittest.skipUnless(sys.platform == "win32", "Windows only")
+class WindowsProfileLock(unittest.TestCase):
+    def setUp(self):
+        from winlock import FirefoxStyleLock
+
+        self.Lock = FirefoxStyleLock
+        self.tmp = tempfile.TemporaryDirectory()
+        self.a = make_profile(self.tmp.name, "aaa.default")
+        self.b = make_profile(self.tmp.name, "bbb.default-release")
+        write_ini(self.tmp.name, "aaa.default", "bbb.default-release", default="bbb.default-release")
+        self.profiles = host.list_profiles(self.tmp.name)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_the_locked_profile_is_the_running_one(self):
+        # A parent.lock nobody holds is what a Firefox that has quit leaves behind.
+        open(os.path.join(self.a, "parent.lock"), "w").close()
+        with self.Lock(os.path.join(self.b, "parent.lock")):
+            running = host.running_firefox(self.profiles)
+            self.assertEqual(running["path"], self.b)
+            self.assertIsNotNone(running["startedAt"])
+        self.assertIsNone(host.running_firefox(self.profiles))
+
+    def test_two_running_profiles_are_left_to_the_user(self):
+        with self.Lock(os.path.join(self.a, "parent.lock")), self.Lock(os.path.join(self.b, "parent.lock")):
+            self.assertEqual(len(host.windows_running_profiles(self.profiles)), 2)
+            self.assertIsNone(host.running_firefox(self.profiles))
+
+
 class Protocol(unittest.TestCase):
     """Runs the script the way Firefox does: length-prefixed JSON over stdio."""
 
     def test_status_round_trip(self):
         with tempfile.TemporaryDirectory() as home:
-            root = os.path.join(home, "Library", "Application Support", "Firefox") if sys.platform == "darwin" else os.path.join(home, ".mozilla", "firefox")
+            if sys.platform == "darwin":
+                root = os.path.join(home, "Library", "Application Support", "Firefox")
+            elif sys.platform == "win32":
+                root = os.path.join(home, "AppData", "Roaming", "Mozilla", "Firefox")
+            else:
+                root = os.path.join(home, ".mozilla", "firefox")
             os.makedirs(root)
             make_profile(root, "zzz.default-release")
             write_ini(root, "zzz.default-release", default="zzz.default-release")
@@ -203,7 +239,7 @@ class Protocol(unittest.TestCase):
                 [sys.executable, HOST_PATH],
                 input=struct.pack("=I", len(payload)) + payload,
                 capture_output=True,
-                env=dict(os.environ, HOME=home),
+                env=dict(os.environ, HOME=home, APPDATA=os.path.join(home, "AppData", "Roaming")),
                 timeout=30,
             )
             (length,) = struct.unpack("=I", proc.stdout[:4])

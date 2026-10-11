@@ -12,7 +12,7 @@ the Firefox profile:
 Anything else in userChrome.css and user.js is left alone. Firefox starts the
 script once per message (runtime.sendNativeMessage); it answers and exits.
 
-Standard library only; Python 3.8+.
+Standard library only; Python 3.8+. macOS, Linux and Windows.
 """
 
 import configparser
@@ -28,7 +28,7 @@ import sys
 import tempfile
 import time
 
-VERSION = "0.1.0"
+VERSION = "0.2.0"
 
 CSS_FILENAME = "autohide-tab-bar.css"
 BACKUP_SUFFIX = ".ahtb-backup"
@@ -99,6 +99,8 @@ def firefox_root():
         return os.path.expanduser("~/Library/Application Support/Firefox")
     if system == "Linux":
         return os.path.expanduser("~/.mozilla/firefox")
+    if system == "Windows":
+        return os.path.join(os.environ["APPDATA"], "Mozilla", "Firefox")
     raise HostError("Unsupported platform: {}".format(system))
 
 
@@ -183,13 +185,42 @@ def process_start_time(pid):
         return None
 
 
-def running_firefox():
-    """The profile held open by the Firefox process that launched us.
+def windows_running_profiles(profiles):
+    """Profiles a Firefox process currently holds open, on Windows.
 
-    Firefox holds a lock on <profile>/.parentlock for as long as it runs, so
-    the first ancestor process with one open is the browser and that directory
-    is its profile. Returns {"path", "pid", "startedAt"} or None.
+    Firefox keeps <profile>/parent.lock open with no sharing for as long as it
+    runs, so opening it fails with a sharing violation (PermissionError). The
+    file itself outlives the browser and is rewritten at every start, so its
+    modification time is when that Firefox started.
     """
+    running = []
+    for profile in profiles:
+        lock = os.path.join(profile["path"], "parent.lock")
+        if not os.path.exists(lock):
+            continue
+        try:
+            with open(lock, "rb"):
+                pass  # openable: left behind by a Firefox that has quit
+        except PermissionError:
+            running.append({"path": profile["path"], "pid": None, "startedAt": os.stat(lock).st_mtime})
+        except OSError:
+            continue
+    return running
+
+
+def running_firefox(profiles=()):
+    """The profile of the Firefox that launched us: {"path", "pid", "startedAt"} or None.
+
+    macOS and Linux: Firefox holds a lock on <profile>/.parentlock while it
+    runs, so the first ancestor process with one open is the browser and that
+    directory is its profile. Windows has no lsof to ask, so there it is the
+    one locked profile; with several Firefox profiles running at once it is
+    left undecided and the settings page asks.
+    """
+    if platform.system() == "Windows":
+        running = windows_running_profiles(profiles)
+        return running[0] if len(running) == 1 else None
+
     pid = os.getppid()
     for _ in range(4):
         if not pid or pid <= 1:
@@ -446,7 +477,8 @@ COMMANDS = {"status": status, "apply": apply, "remove": remove}
 
 def handle(msg, ctx=None):
     if ctx is None:
-        ctx = {"profiles": list_profiles(), "running": running_firefox()}
+        profiles = list_profiles()
+        ctx = {"profiles": profiles, "running": running_firefox(profiles)}
     if not isinstance(msg, dict) or msg.get("cmd") not in COMMANDS:
         raise HostError("Unknown command")
     return COMMANDS[msg["cmd"]](msg, ctx)
