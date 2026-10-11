@@ -1,0 +1,226 @@
+"""Tests for native-host/autohide_tab_bar_host.py. Run: python3 -m unittest discover -s tests"""
+
+import json
+import os
+import struct
+import subprocess
+import sys
+import tempfile
+import unittest
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+HOST_PATH = os.path.join(HERE, "..", "native-host", "autohide_tab_bar_host.py")
+sys.path.insert(0, os.path.dirname(HOST_PATH))
+
+import autohide_tab_bar_host as host  # noqa: E402
+
+PREFS = {
+    "toolkit.legacyUserProfileCustomizations.stylesheets": True,
+    "sidebar.verticalTabs": True,
+    "sidebar.position_start": False,
+    "sidebar.visibility": "always-show",
+}
+
+
+def make_profile(root, name):
+    path = os.path.join(root, "Profiles", name)
+    os.makedirs(path)
+    with open(os.path.join(path, "prefs.js"), "w") as f:
+        f.write('user_pref("toolkit.legacyUserProfileCustomizations.stylesheets", false);\n')
+    return os.path.realpath(path)
+
+
+def write_ini(root, *names, default=None):
+    lines = []
+    for i, name in enumerate(names):
+        lines += ["[Profile{}]".format(i), "Name={}".format(name), "IsRelative=1", "Path=Profiles/{}".format(name), ""]
+    if default:
+        lines += ["[InstallABC]", "Default=Profiles/{}".format(default), "Locked=1", ""]
+    with open(os.path.join(root, "profiles.ini"), "w") as f:
+        f.write("\n".join(lines))
+
+
+def read(path):
+    with open(path) as f:
+        return f.read()
+
+
+class UserChromeImport(unittest.TestCase):
+    def test_goes_first_and_is_idempotent(self):
+        once = host.with_import("#nav-bar { color: red; }\n")
+        self.assertTrue(once.startswith(host.IMPORT_BEGIN))
+        self.assertIn("#nav-bar { color: red; }", once)
+        self.assertEqual(host.with_import(once), once)
+
+    def test_stays_after_charset(self):
+        out = host.with_import('@charset "UTF-8";\n@namespace url(x);\n')
+        self.assertTrue(out.startswith('@charset "UTF-8";\n' + host.IMPORT_BEGIN))
+        self.assertLess(out.index("@import"), out.index("@namespace"))
+
+    def test_strip_leaves_user_content(self):
+        original = "/* mine */\n.a { color: red; }\n"
+        self.assertEqual(host.strip_block(host.with_import(original), host.IMPORT_BEGIN, host.IMPORT_END), original)
+
+
+class UserJs(unittest.TestCase):
+    def test_block_is_last_and_replaced(self):
+        existing = 'user_pref("sidebar.verticalTabs", false);\n'
+        once = host.with_prefs(existing, PREFS)
+        self.assertTrue(once.startswith(existing))
+        self.assertTrue(once.rstrip().endswith(host.USERJS_END))
+        self.assertIn('user_pref("sidebar.visibility", "always-show");', once)
+        twice = host.with_prefs(once, {"sidebar.verticalTabs": False})
+        self.assertEqual(twice.count(host.USERJS_BEGIN), 1)
+        self.assertNotIn("sidebar.visibility", twice)
+
+    def test_rejects_unlisted_or_mistyped_prefs(self):
+        for bad in ({"security.sandbox.content.level": 0}, {"sidebar.verticalTabs": "yes"}, {"sidebar.visibility": "evil"}):
+            with self.assertRaises(host.HostError):
+                host.validate_prefs(bad)
+        with self.assertRaises(host.HostError):
+            host.validate_prefs({"sidebar.verticalTabs": 1})  # bool only, not int
+
+    def test_address_bar_prefs(self):
+        ok = {
+            "browser.urlbar.trimURLs": False,
+            "browser.urlbar.trimHttps": False,
+            "browser.urlbar.suggest.searches": True,
+            "browser.urlbar.openintab": True,
+            "browser.urlbar.showSearchTerms.enabled": False,
+            "browser.urlbar.maxRichResults": 20,
+        }
+        self.assertEqual(host.validate_prefs(ok), ok)
+        self.assertIn('user_pref("browser.urlbar.maxRichResults", 20);', host.with_prefs("", ok))
+        for bad in (0, 21, True, "10"):
+            with self.assertRaises(host.HostError, msg=repr(bad)):
+                host.validate_prefs({"browser.urlbar.maxRichResults": bad})
+
+
+class Profiles(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = self.tmp.name
+        self.a = make_profile(self.root, "aaa.default")
+        self.b = make_profile(self.root, "bbb.default-release")
+        write_ini(self.root, "aaa.default", "bbb.default-release", default="bbb.default-release")
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_install_default_listed_first(self):
+        profiles = host.list_profiles(self.root)
+        self.assertEqual([p["path"] for p in profiles], [self.b, self.a])
+        self.assertTrue(profiles[0]["isDefault"])
+
+    def test_choose_profile(self):
+        profiles = host.list_profiles(self.root)
+        self.assertEqual(host.choose_profile(None, profiles, None), (self.b, "guess"))
+        self.assertEqual(host.choose_profile(None, profiles, {"path": self.a}), (self.a, "running"))
+        self.assertEqual(host.choose_profile(self.a, profiles, None), (self.a, "requested"))
+        with self.assertRaises(host.HostError):
+            host.choose_profile("/etc", profiles, None)
+
+    def test_apply_then_remove(self):
+        ctx = {"profiles": host.list_profiles(self.root), "running": {"path": self.a, "pid": 1, "startedAt": 1.0}}
+        chrome = os.path.join(self.a, "chrome")
+        os.makedirs(chrome)
+        with open(os.path.join(chrome, "userChrome.css"), "w") as f:
+            f.write(".mine { color: red; }\n")
+        with open(os.path.join(self.a, "user.js"), "w") as f:
+            f.write('user_pref("browser.startup.page", 3);\n')
+
+        res = host.handle({"cmd": "apply", "css": "#x { color: blue !important; }\n", "prefs": PREFS, "hash": "abcdef12"}, ctx)
+        self.assertTrue(res["ok"])
+        self.assertTrue(res["installed"]["cssFile"])
+        self.assertEqual(res["installed"]["hash"], "abcdef12")
+        self.assertTrue(res["restartPending"])  # applied after the (fake) start time
+        self.assertTrue(res["profile"]["isRunning"])
+        self.assertEqual(res["stylesheetsPref"], False)
+
+        user_chrome = read(os.path.join(chrome, "userChrome.css"))
+        self.assertTrue(user_chrome.startswith(host.IMPORT_BEGIN))
+        self.assertIn(".mine { color: red; }", user_chrome)
+        self.assertTrue(os.path.exists(os.path.join(chrome, "userChrome.css" + host.BACKUP_SUFFIX)))
+        self.assertIn("#x { color: blue", read(os.path.join(chrome, host.CSS_FILENAME)))
+        self.assertIn('"sidebar.position_start", false', read(os.path.join(self.a, "user.js")))
+
+        res = host.handle({"cmd": "remove"}, ctx)
+        self.assertFalse(res["installed"]["cssFile"])
+        self.assertFalse(res["installed"]["importLine"])
+        self.assertFalse(res["installed"]["userJs"])
+        self.assertEqual(read(os.path.join(chrome, "userChrome.css")), ".mine { color: red; }\n")
+        self.assertEqual(read(os.path.join(self.a, "user.js")), 'user_pref("browser.startup.page", 3);\n')
+
+    def test_remove_deletes_files_that_only_held_our_blocks(self):
+        ctx = {"profiles": host.list_profiles(self.root), "running": None}
+        host.handle({"cmd": "apply", "css": "#x{}", "prefs": PREFS, "profile": self.b}, ctx)
+        host.handle({"cmd": "remove", "profile": self.b}, ctx)
+        self.assertFalse(os.path.exists(os.path.join(self.b, "chrome", "userChrome.css")))
+        self.assertFalse(os.path.exists(os.path.join(self.b, "user.js")))
+
+    def test_never_writes_to_a_guessed_profile(self):
+        ctx = {"profiles": host.list_profiles(self.root), "running": None}
+        status = host.handle({"cmd": "status"}, ctx)
+        self.assertEqual(status["profile"]["chosenBy"], "guess")
+        for cmd in ("apply", "remove"):
+            with self.assertRaises(host.HostError):
+                host.handle({"cmd": cmd, "css": "#x{}", "prefs": PREFS}, ctx)
+        self.assertFalse(os.path.exists(os.path.join(self.b, "chrome")))
+
+    def test_running_profile_outside_profiles_ini_is_listed(self):
+        elsewhere = tempfile.mkdtemp()
+        self.addCleanup(lambda: __import__("shutil").rmtree(elsewhere))
+        running = {"path": os.path.realpath(elsewhere), "pid": 1, "startedAt": 1.0}
+        status = host.handle({"cmd": "status"}, {"profiles": host.list_profiles(self.root), "running": running})
+        self.assertEqual(status["profile"]["path"], running["path"])
+        self.assertEqual(status["profiles"][0]["path"], running["path"])
+
+    def test_apply_rejects_bad_input(self):
+        ctx = {"profiles": host.list_profiles(self.root), "running": None}
+        for msg in (
+            {"cmd": "apply", "css": "", "prefs": PREFS, "profile": self.b},
+            {"cmd": "apply", "css": "#x{}", "prefs": {"app.update.auto": False}, "profile": self.b},
+            {"cmd": "apply", "css": "#x{}", "prefs": PREFS, "hash": "../../etc", "profile": self.b},
+            {"cmd": "apply", "css": "#x{}", "prefs": PREFS, "profile": self.root},
+            {"cmd": "rm -rf"},
+        ):
+            with self.assertRaises(host.HostError, msg=str(msg)):
+                host.handle(msg, ctx)
+
+
+class Protocol(unittest.TestCase):
+    """Runs the script the way Firefox does: length-prefixed JSON over stdio."""
+
+    def test_status_round_trip(self):
+        with tempfile.TemporaryDirectory() as home:
+            root = os.path.join(home, "Library", "Application Support", "Firefox") if sys.platform == "darwin" else os.path.join(home, ".mozilla", "firefox")
+            os.makedirs(root)
+            make_profile(root, "zzz.default-release")
+            write_ini(root, "zzz.default-release", default="zzz.default-release")
+
+            payload = json.dumps({"cmd": "status"}).encode()
+            proc = subprocess.run(
+                [sys.executable, HOST_PATH],
+                input=struct.pack("=I", len(payload)) + payload,
+                capture_output=True,
+                env=dict(os.environ, HOME=home),
+                timeout=30,
+            )
+            (length,) = struct.unpack("=I", proc.stdout[:4])
+            reply = json.loads(proc.stdout[4 : 4 + length])
+            self.assertTrue(reply["ok"], reply)
+            self.assertEqual(reply["profile"]["name"], "zzz.default-release")
+            self.assertFalse(reply["installed"]["cssFile"])
+
+    def test_errors_are_reported_not_crashed(self):
+        payload = b"not json"
+        proc = subprocess.run(
+            [sys.executable, HOST_PATH], input=struct.pack("=I", len(payload)) + payload, capture_output=True, timeout=30
+        )
+        (length,) = struct.unpack("=I", proc.stdout[:4])
+        reply = json.loads(proc.stdout[4 : 4 + length])
+        self.assertFalse(reply["ok"])
+
+
+if __name__ == "__main__":
+    unittest.main()

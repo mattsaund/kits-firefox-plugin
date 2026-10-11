@@ -1,0 +1,201 @@
+/* ===========================================================================
+   Auto-hide native vertical tabs sidebar
+   ---------------------------------------------------------------------------
+   Collapses Firefox's native sidebar down to a sliver (or nothing at all) and
+   slides it back out when the pointer reaches the left edge of the window.
+
+   The sidebar is *overlaid* rather than inlined: it always reserves exactly
+   --uc-sidebar-collapsed pixels of layout space, and the extra width it gains
+   when expanding is cancelled out by a negative margin-right. That means the
+   web page never reflows when the sidebar opens or closes — it just gets
+   covered up (#sidebar-container sits above it via z-index).
+
+   Requires toolkit.legacyUserProfileCustomizations.stylesheets = true.
+   Verified against Firefox 155.
+   =========================================================================== */
+
+
+/* ---------------------------------------------------------------------------
+   Tunable values
+   --------------------------------------------------------------------------- */
+:root {
+  /* Visible width of the sidebar while collapsed. This is what you actually
+     see, and it is also the amount of horizontal space permanently taken away
+     from the web page. Safe to set to 0px for a completely hidden sidebar —
+     hover detection does NOT depend on this value (see --uc-sidebar-trigger). */
+  --uc-sidebar-collapsed: 0px;
+
+  /* Width of the invisible hover strip that reaches out past the visible edge
+     of the sidebar and floats over the page. This is what catches the pointer
+     and triggers the expand, so it is the knob to turn if the sidebar feels
+     hard to grab. It costs no layout space and is never painted.
+
+     Trade-off: this strip sits *on top* of the page, so it also swallows
+     clicks in that band along the left edge. ~8-20px is a comfortable range;
+     much more than that and you will start missing links near the page edge. */
+  --uc-sidebar-trigger: 10px;
+
+  /* Visible width of the sidebar while expanded — i.e. how much room the tab
+     titles get to be readable. */
+  --uc-sidebar-expanded: 175px;
+
+  /* Speed / easing of the slide animation, in both directions. */
+  --uc-sidebar-transition: 200ms ease;
+
+  /* Grace period before collapsing after the pointer leaves. Expanding is
+     always instant; only collapsing waits. This exists mainly to cover the
+     instant a context menu opens, before the pointer has settled onto one of
+     its items — see the context-menu notes further down. Raise it if the
+     sidebar still flickers shut when you right-click; lower it toward 0ms if
+     the sidebar feels like it lingers too long. */
+  --uc-sidebar-collapse-delay: 150ms;
+}
+
+
+/* ---------------------------------------------------------------------------
+   Collapsed state
+   ---------------------------------------------------------------------------
+   How the two independent widths are kept independent:
+
+     border-box width = --uc-sidebar-collapsed + --uc-sidebar-trigger
+     border-right     = --uc-sidebar-trigger, fully transparent
+     padding box      = --uc-sidebar-collapsed   <- overflow:hidden clips here,
+                                                    so this is the visible part
+     margin-right     = -(--uc-sidebar-trigger)  <- gives the trigger's width
+                                                    back to the page
+
+   A transparent border is still a hit target, so the pointer entering that
+   strip counts as hovering #sidebar-container even when the visible part is
+   0px wide. `background-clip: padding-box` stops the sidebar's own background
+   from bleeding out into the strip and making it visible.
+
+   Net layout footprint: (collapsed + trigger) + (-trigger) = collapsed.
+   --------------------------------------------------------------------------- */
+#sidebar-container {
+  box-sizing: border-box !important;
+  min-width: calc(var(--uc-sidebar-collapsed) + var(--uc-sidebar-trigger)) !important;
+  max-width: calc(var(--uc-sidebar-collapsed) + var(--uc-sidebar-trigger)) !important;
+  margin-right: calc(-1 * var(--uc-sidebar-trigger)) !important;
+
+  border-right: var(--uc-sidebar-trigger) solid transparent !important;
+  background-clip: padding-box !important;
+
+  /* Clips the tab strip (which has a much larger intrinsic width) down to the
+     padding box, so nothing spills out of the collapsed sliver. */
+  overflow: hidden !important;
+
+  /* Lifts the sidebar above the page content it overlaps. */
+  position: relative !important;
+  z-index: 100 !important;
+
+  /* The delay applies only in this direction (collapsing). The expanded rule
+     below zeroes it, so opening stays instantaneous. */
+  transition: min-width    var(--uc-sidebar-transition) var(--uc-sidebar-collapse-delay),
+              max-width    var(--uc-sidebar-transition) var(--uc-sidebar-collapse-delay),
+              margin-right var(--uc-sidebar-transition) var(--uc-sidebar-collapse-delay) !important;
+}
+
+/* Opaque backdrop so the page underneath doesn't show through the expanded
+   sidebar. background-clip above keeps this off the transparent trigger strip. */
+#sidebar-container,
+#sidebar-container > * {
+	background-color: #000000;
+}
+
+
+/* ---------------------------------------------------------------------------
+   Expanded state
+   ---------------------------------------------------------------------------
+   Same arithmetic as the collapsed rule, just with --uc-sidebar-expanded as
+   the visible width. margin-right subtracts everything gained beyond
+   --uc-sidebar-collapsed so the footprint is unchanged and the page never
+   reflows:
+
+     (expanded + trigger) + (collapsed - expanded - trigger) = collapsed
+
+   The trigger strip is kept in this state too, which adds a little hysteresis:
+   you have to move the pointer that bit further right before it collapses.
+
+   Everything after the first selector exists because Firefox drops :hover in
+   situations where the sidebar still needs to stay open. Each is explained
+   above its selector below.
+   --------------------------------------------------------------------------- */
+
+/* [1] The normal case — pointer is over the sidebar or its trigger strip. */
+#sidebar-container:hover,
+
+/* [2] Firefox suppresses :hover for the whole duration of a native drag
+       session, which used to collapse the strip out from under a tab that was
+       being reordered. #tabbrowser-tabs gets [movingtab] at dragstart and
+       keeps it until drop; tab-group labels use [movingtabgroup]. */
+#sidebar-container:has(#tabbrowser-tabs[movingtab]),
+#sidebar-container:has(tab-group[movingtabgroup]),
+
+/* [3] An open popup drops :hover the same way. <panel> is self-describing —
+       panel.js sets panelopen="true" on itself while shown — so the tab group
+       editor (the panel behind both "add to new group" and right-clicking a
+       group label) can be detected directly. */
+:root:has(#tab-group-editor panel[panelopen]) #sidebar-container,
+
+/* [4] Right-click context menus. These are <menupopup>, which — unlike <panel>
+       — advertises nothing about being open: menupopup.js sets no state
+       attribute, and the only attribute it ever gains, hasbeenopened, survives
+       closing and so is useless here. The tab isn't marked either;
+       TabContextMenu.contextTab is a plain JS property.
+
+       What IS exposed is [_moz-menuactive], which Gecko puts on the single
+       menuitem (or submenu <menu>) currently highlighted inside an open menu.
+       No menu is open => no element has it, so this is a safe proxy for "a
+       menu belonging to the sidebar is open and in use". Because the submenus
+       are nested inside their parent popup in the DOM, the descendant
+       combinator reaches them too — "Move Tab to Group >" and friends are
+       covered without listing them.
+
+       Caveat: [_moz-menuactive] only holds while the pointer is actually on an
+       item. It is absent for the moment right after the menu opens, and while
+       the pointer sits on a separator or the popup's padding.
+       --uc-sidebar-collapse-delay above is what bridges those gaps.
+
+       The :hover variant is a harmless second line of defence: Firefox styles
+       menus exclusively via [_moz-menuactive] and never :hover, so it may
+       simply never match — but if it does, it covers the separator/padding
+       gaps that [_moz-menuactive] leaves open.
+
+       Only menus that can be opened from inside the sidebar are listed.
+       #contentAreaContextMenu is deliberately absent: right-clicking the web
+       page should let the sidebar collapse as usual. */
+:root:has(:is(#tabContextMenu,
+              #open-tab-group-context-menu,
+              #saved-tab-group-context-menu,
+              #sidebar-context-menu,
+              #sidebar-bookmarks-context-menu,
+              #sidebar-history-context-menu,
+              #sidebar-opentabs-context-menu,
+              #sidebar-synced-tabs-context-menu) :is(menu, menuitem)[_moz-menuactive]) #sidebar-container,
+:root:has(:is(#tabContextMenu,
+              #open-tab-group-context-menu,
+              #saved-tab-group-context-menu,
+              #sidebar-context-menu,
+              #sidebar-bookmarks-context-menu,
+              #sidebar-history-context-menu,
+              #sidebar-opentabs-context-menu,
+              #sidebar-synced-tabs-context-menu):hover) #sidebar-container {
+  min-width: calc(var(--uc-sidebar-expanded) + var(--uc-sidebar-trigger)) !important;
+  max-width: calc(var(--uc-sidebar-expanded) + var(--uc-sidebar-trigger)) !important;
+  margin-right: calc(var(--uc-sidebar-collapsed)
+                     - var(--uc-sidebar-expanded)
+                     - var(--uc-sidebar-trigger)) !important;
+
+  /* Opening is immediate; only the collapse waits out the grace period. */
+  transition-delay: 0s !important;
+}
+
+
+/* ---------------------------------------------------------------------------
+   Remove the drag splitter between the tab strip and the sidebar panel — it
+   would otherwise be draggable inside the collapsed sliver and fight the
+   fixed widths set above.
+   --------------------------------------------------------------------------- */
+#sidebar-launcher-splitter {
+  display: none !important;
+}

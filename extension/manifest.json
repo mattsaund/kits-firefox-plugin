@@ -1,0 +1,32 @@
+{
+  "manifest_version": 3,
+  "name": "Auto-Hide Tab Bar",
+  "version": "1.0.0",
+  "description": "An auto-hiding tab bar on any edge of the window (left, right, top or bottom), with size, color and animation settings.",
+  "author": "Matthew Saunders and Austin Laubach",
+  "icons": {
+    "48": "icons/icon.svg",
+    "96": "icons/icon.svg"
+  },
+  "permissions": ["storage", "nativeMessaging"],
+  "background": {
+    "scripts": ["background.js"]
+  },
+  "action": {
+    "default_title": "Auto-Hide Tab Bar settings",
+    "default_icon": "icons/icon.svg"
+  },
+  "options_ui": {
+    "page": "options/options.html",
+    "open_in_tab": true
+  },
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "autohide-tab-bar@kits",
+      "strict_min_version": "155.0",
+      "data_collection_permissions": {
+        "required": ["none"]
+      }
+    }
+  }
+}

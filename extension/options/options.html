@@ -1,0 +1,401 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Auto-Hide Tab Bar</title>
+  <link rel="icon" href="../icons/icon.svg">
+  <link rel="stylesheet" href="options.css">
+  <script type="module" src="options.js"></script>
+</head>
+<body>
+  <header class="page-header">
+    <img src="../icons/icon.svg" alt="" width="28" height="28">
+    <h1>Auto-Hide Tab Bar</h1>
+    <span id="save-indicator" class="save-indicator" aria-live="polite"></span>
+  </header>
+
+  <main class="layout">
+    <form id="settings" class="settings" autocomplete="off">
+
+      <section class="card">
+        <h2>Position</h2>
+        <div class="positions" role="radiogroup" aria-label="Tab bar position">
+          <label class="position">
+            <input type="radio" name="position" value="left">
+            <span class="pos-glyph" data-side="left" aria-hidden="true"><i></i></span>
+            <span>Left</span>
+          </label>
+          <label class="position">
+            <input type="radio" name="position" value="right">
+            <span class="pos-glyph" data-side="right" aria-hidden="true"><i></i></span>
+            <span>Right</span>
+          </label>
+          <label class="position">
+            <input type="radio" name="position" value="top">
+            <span class="pos-glyph" data-side="top" aria-hidden="true"><i></i></span>
+            <span>Top</span>
+          </label>
+          <label class="position">
+            <input type="radio" name="position" value="bottom">
+            <span class="pos-glyph" data-side="bottom" aria-hidden="true"><i></i></span>
+            <span>Bottom</span>
+          </label>
+        </div>
+        <p class="hint" data-show="vertical">Uses Firefox's vertical tabs.</p>
+        <p class="hint" data-show="horizontal">Uses Firefox's horizontal tabs. The window buttons move into the toolbar so they stay reachable.</p>
+      </section>
+
+      <section class="card">
+        <h2>Behavior</h2>
+        <p class="hint section-hint">Animation, delays and the hover zone apply to the tab bar and, if it auto-hides, the toolbar.</p>
+        <label class="row">
+          <span class="row-label">Auto-hide<small>Collapse when the pointer leaves, open when it reaches the edge</small></span>
+          <input type="checkbox" class="switch" name="autoHide">
+        </label>
+        <div class="row" data-requires="autoHide">
+          <span class="row-label">When it opens</span>
+          <div class="segmented">
+            <label><input type="radio" name="overlay" value="true"><span>Slide over the page</span></label>
+            <label><input type="radio" name="overlay" value="false"><span>Push the page aside</span></label>
+          </div>
+        </div>
+        <div class="row slider" data-requires="autoHide|toolbarAutoHide">
+          <label class="row-label" for="f-duration">Animation length<small>0 turns the animation off</small></label>
+          <input type="range" id="f-duration" name="duration" step="10">
+          <span class="num"><input type="number" data-for="duration" step="10"><em>ms</em></span>
+        </div>
+        <div class="row" data-requires="autoHide|toolbarAutoHide">
+          <label class="row-label" for="f-easing">Animation style</label>
+          <select id="f-easing" name="easing"></select>
+        </div>
+        <div class="row slider" data-requires="autoHide|toolbarAutoHide">
+          <label class="row-label" for="f-openDelay">Open delay<small>Wait before opening, so brushing past the edge doesn't trigger it</small></label>
+          <input type="range" id="f-openDelay" name="openDelay" step="10">
+          <span class="num"><input type="number" data-for="openDelay" step="10"><em>ms</em></span>
+        </div>
+        <div class="row slider" data-requires="autoHide|toolbarAutoHide">
+          <label class="row-label" for="f-closeDelay">Close delay<small>Grace period after the pointer leaves. Also keeps it open while a right-click menu appears.</small></label>
+          <input type="range" id="f-closeDelay" name="closeDelay" step="10">
+          <span class="num"><input type="number" data-for="closeDelay" step="10"><em>ms</em></span>
+        </div>
+        <label class="row" data-requires="autoHide|toolbarAutoHide">
+          <span class="row-label">Respect "reduce motion"<small>Skip the animation when your system asks for less motion</small></span>
+          <input type="checkbox" class="switch" name="reducedMotion">
+        </label>
+      </section>
+
+      <section class="card">
+        <h2>Size</h2>
+        <div class="row slider" data-show="vertical">
+          <label class="row-label" for="f-expandedWidth">Open width</label>
+          <input type="range" id="f-expandedWidth" name="expandedWidth" step="5">
+          <span class="num"><input type="number" data-for="expandedWidth" step="5"><em>px</em></span>
+        </div>
+        <label class="row" data-show="horizontal">
+          <span class="row-label">Match Firefox's tab height<small>Follows your density setting (compact, normal, touch)</small></span>
+          <input type="checkbox" class="switch" name="expandedHeightAuto">
+        </label>
+        <div class="row slider" data-show="horizontal" data-requires="!expandedHeightAuto">
+          <label class="row-label" for="f-expandedHeight">Open height</label>
+          <input type="range" id="f-expandedHeight" name="expandedHeight" step="1">
+          <span class="num"><input type="number" data-for="expandedHeight" step="1"><em>px</em></span>
+        </div>
+        <div class="row slider" data-requires="autoHide">
+          <label class="row-label" for="f-collapsedSize">Closed size<small>How much stays visible when hidden. 0 hides it completely.</small></label>
+          <input type="range" id="f-collapsedSize" name="collapsedSize" step="1">
+          <span class="num"><input type="number" data-for="collapsedSize" step="1"><em>px</em></span>
+        </div>
+        <div class="row slider" data-requires="autoHide|toolbarAutoHide">
+          <label class="row-label" for="f-triggerSize">Hover zone<small>Invisible strip along the edge that opens the bar. Larger is easier to hit but covers more of the page edge.</small></label>
+          <input type="range" id="f-triggerSize" name="triggerSize" step="1">
+          <span class="num"><input type="number" data-for="triggerSize" step="1"><em>px</em></span>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>Look</h2>
+        <div class="row color">
+          <span class="row-label">Background</span>
+          <div class="segmented small">
+            <label><input type="radio" name="backgroundCustom" value="false"><span>Theme</span></label>
+            <label><input type="radio" name="backgroundCustom" value="true"><span>Custom</span></label>
+          </div>
+          <input type="color" name="backgroundColor" aria-label="Background color" data-requires="backgroundCustom">
+        </div>
+        <div class="row slider" data-requires="backgroundCustom">
+          <label class="row-label" for="f-backgroundOpacity">Background opacity</label>
+          <input type="range" id="f-backgroundOpacity" name="backgroundOpacity" step="1">
+          <span class="num"><input type="number" data-for="backgroundOpacity" step="1"><em>%</em></span>
+        </div>
+        <div class="row color">
+          <span class="row-label">Text and icons</span>
+          <div class="segmented small">
+            <label><input type="radio" name="textCustom" value="false"><span>Theme</span></label>
+            <label><input type="radio" name="textCustom" value="true"><span>Custom</span></label>
+          </div>
+          <input type="color" name="textColor" aria-label="Text color" data-requires="textCustom">
+        </div>
+        <div class="row color">
+          <span class="row-label">Selected tab</span>
+          <div class="segmented small">
+            <label><input type="radio" name="selectedCustom" value="false"><span>Theme</span></label>
+            <label><input type="radio" name="selectedCustom" value="true"><span>Custom</span></label>
+          </div>
+          <input type="color" name="selectedColor" aria-label="Selected tab color" data-requires="selectedCustom">
+        </div>
+        <div class="row color">
+          <span class="row-label">Selected tab text</span>
+          <div class="segmented small">
+            <label><input type="radio" name="selectedTextCustom" value="false"><span>Theme</span></label>
+            <label><input type="radio" name="selectedTextCustom" value="true"><span>Custom</span></label>
+          </div>
+          <input type="color" name="selectedTextColor" aria-label="Selected tab text color" data-requires="selectedTextCustom">
+        </div>
+        <div class="row color">
+          <span class="row-label">Tab under the pointer</span>
+          <div class="segmented small">
+            <label><input type="radio" name="hoverCustom" value="false"><span>Theme</span></label>
+            <label><input type="radio" name="hoverCustom" value="true"><span>Custom</span></label>
+          </div>
+          <input type="color" name="hoverColor" aria-label="Hovered tab color" data-requires="hoverCustom">
+        </div>
+        <div class="row color">
+          <span class="row-label">Tab corners</span>
+          <div class="segmented small">
+            <label><input type="radio" name="radiusCustom" value="false"><span>Theme</span></label>
+            <label><input type="radio" name="radiusCustom" value="true"><span>Custom</span></label>
+          </div>
+          <span class="swatch-spacer"></span>
+        </div>
+        <div class="row slider" data-requires="radiusCustom">
+          <label class="row-label" for="f-radius">Corner radius</label>
+          <input type="range" id="f-radius" name="radius" step="1">
+          <span class="num"><input type="number" data-for="radius" step="1"><em>px</em></span>
+        </div>
+        <div class="row slider edge">
+          <label class="row-label" for="f-edgeWidth">Edge line<small>A line where the bar meets the page</small></label>
+          <input type="range" id="f-edgeWidth" name="edgeWidth" step="1">
+          <span class="num"><input type="number" data-for="edgeWidth" step="1"><em>px</em></span>
+          <input type="color" name="edgeColor" aria-label="Edge line color" data-requires="edgeWidth">
+        </div>
+        <label class="row" data-requires="autoHide">
+          <span class="row-label">Shadow when open<small>Lifts the open bar off the page</small></span>
+          <input type="checkbox" class="switch" name="shadow">
+        </label>
+      </section>
+
+      <section class="card">
+        <h2>Toolbar</h2>
+        <label class="row">
+          <span class="row-label">Auto-hide the toolbar<small>Slides down over the page when the pointer reaches the top edge. Stays open while you type in the address bar or a menu is open.</small></span>
+          <input type="checkbox" class="switch" name="toolbarAutoHide">
+        </label>
+        <p class="hint row-hint" data-show-position="top" data-show-if="toolbarAutoHide">With the tab bar at the top, the tabs hide along with the toolbar.</p>
+        <div class="row color">
+          <span class="row-label">Toolbar background</span>
+          <div class="segmented small">
+            <label><input type="radio" name="toolbarBgCustom" value="false"><span>Theme</span></label>
+            <label><input type="radio" name="toolbarBgCustom" value="true"><span>Custom</span></label>
+          </div>
+          <input type="color" name="toolbarBgColor" aria-label="Toolbar background color" data-requires="toolbarBgCustom">
+        </div>
+        <div class="row color">
+          <span class="row-label">Toolbar icons</span>
+          <div class="segmented small">
+            <label><input type="radio" name="toolbarIconCustom" value="false"><span>Theme</span></label>
+            <label><input type="radio" name="toolbarIconCustom" value="true"><span>Custom</span></label>
+          </div>
+          <input type="color" name="toolbarIconColor" aria-label="Toolbar icon color" data-requires="toolbarIconCustom">
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>Address bar</h2>
+        <div class="row color">
+          <span class="row-label">Background</span>
+          <div class="segmented small">
+            <label><input type="radio" name="urlbarBgCustom" value="false"><span>Theme</span></label>
+            <label><input type="radio" name="urlbarBgCustom" value="true"><span>Custom</span></label>
+          </div>
+          <input type="color" name="urlbarBgColor" aria-label="Address bar background color" data-requires="urlbarBgCustom">
+        </div>
+        <div class="row color">
+          <span class="row-label">Text</span>
+          <div class="segmented small">
+            <label><input type="radio" name="urlbarTextCustom" value="false"><span>Theme</span></label>
+            <label><input type="radio" name="urlbarTextCustom" value="true"><span>Custom</span></label>
+          </div>
+          <input type="color" name="urlbarTextColor" aria-label="Address bar text color" data-requires="urlbarTextCustom">
+        </div>
+        <div class="row color">
+          <span class="row-label">Outline while typing</span>
+          <div class="segmented small">
+            <label><input type="radio" name="urlbarFocusCustom" value="false"><span>Theme</span></label>
+            <label><input type="radio" name="urlbarFocusCustom" value="true"><span>Custom</span></label>
+          </div>
+          <input type="color" name="urlbarFocusColor" aria-label="Address bar focus outline color" data-requires="urlbarFocusCustom">
+        </div>
+        <div class="row color">
+          <span class="row-label">Height</span>
+          <div class="segmented small">
+            <label><input type="radio" name="urlbarHeightCustom" value="false"><span>Theme</span></label>
+            <label><input type="radio" name="urlbarHeightCustom" value="true"><span>Custom</span></label>
+          </div>
+          <span class="swatch-spacer"></span>
+        </div>
+        <div class="row slider" data-requires="urlbarHeightCustom">
+          <label class="row-label" for="f-urlbarHeight">Address bar height</label>
+          <input type="range" id="f-urlbarHeight" name="urlbarHeight" step="1">
+          <span class="num"><input type="number" data-for="urlbarHeight" step="1"><em>px</em></span>
+        </div>
+        <div class="row color">
+          <span class="row-label">Corners</span>
+          <div class="segmented small">
+            <label><input type="radio" name="urlbarRadiusCustom" value="false"><span>Theme</span></label>
+            <label><input type="radio" name="urlbarRadiusCustom" value="true"><span>Custom</span></label>
+          </div>
+          <span class="swatch-spacer"></span>
+        </div>
+        <div class="row slider" data-requires="urlbarRadiusCustom">
+          <label class="row-label" for="f-urlbarRadius">Corner radius</label>
+          <input type="range" id="f-urlbarRadius" name="urlbarRadius" step="1">
+          <span class="num"><input type="number" data-for="urlbarRadius" step="1"><em>px</em></span>
+        </div>
+        <div class="row color">
+          <span class="row-label">Text size</span>
+          <div class="segmented small">
+            <label><input type="radio" name="urlbarFontCustom" value="false"><span>Theme</span></label>
+            <label><input type="radio" name="urlbarFontCustom" value="true"><span>Custom</span></label>
+          </div>
+          <span class="swatch-spacer"></span>
+        </div>
+        <div class="row slider" data-requires="urlbarFontCustom">
+          <label class="row-label" for="f-urlbarFontSize">Font size</label>
+          <input type="range" id="f-urlbarFontSize" name="urlbarFontSize" step="1">
+          <span class="num"><input type="number" data-for="urlbarFontSize" step="1"><em>px</em></span>
+        </div>
+        <div class="row color">
+          <span class="row-label">Width</span>
+          <div class="segmented small">
+            <label><input type="radio" name="urlbarWidthCustom" value="false"><span>Fill</span></label>
+            <label><input type="radio" name="urlbarWidthCustom" value="true"><span>Limit</span></label>
+          </div>
+          <span class="swatch-spacer"></span>
+        </div>
+        <div class="row slider" data-requires="urlbarWidthCustom">
+          <label class="row-label" for="f-urlbarMaxWidth">Maximum width<small>Centered in the space it has</small></label>
+          <input type="range" id="f-urlbarMaxWidth" name="urlbarMaxWidth" step="10">
+          <span class="num"><input type="number" data-for="urlbarMaxWidth" step="10"><em>px</em></span>
+        </div>
+
+        <h3>Behavior</h3>
+        <p class="hint section-hint">These change Firefox settings. "Firefox" leaves whatever you chose in Firefox's own settings alone.</p>
+        <div class="row">
+          <span class="row-label">Show full addresses<small>Keep https:// and the full path visible</small></span>
+          <div class="segmented small">
+            <label><input type="radio" name="urlbarFullUrls" value="keep"><span>Firefox</span></label>
+            <label><input type="radio" name="urlbarFullUrls" value="on"><span>On</span></label>
+            <label><input type="radio" name="urlbarFullUrls" value="off"><span>Off</span></label>
+          </div>
+        </div>
+        <div class="row">
+          <span class="row-label">Search suggestions while typing</span>
+          <div class="segmented small">
+            <label><input type="radio" name="urlbarSuggestions" value="keep"><span>Firefox</span></label>
+            <label><input type="radio" name="urlbarSuggestions" value="on"><span>On</span></label>
+            <label><input type="radio" name="urlbarSuggestions" value="off"><span>Off</span></label>
+          </div>
+        </div>
+        <div class="row">
+          <span class="row-label">Open results in a new tab</span>
+          <div class="segmented small">
+            <label><input type="radio" name="urlbarNewTab" value="keep"><span>Firefox</span></label>
+            <label><input type="radio" name="urlbarNewTab" value="on"><span>On</span></label>
+            <label><input type="radio" name="urlbarNewTab" value="off"><span>Off</span></label>
+          </div>
+        </div>
+        <div class="row">
+          <span class="row-label">Show search terms on results pages<small>Instead of the results page's address</small></span>
+          <div class="segmented small">
+            <label><input type="radio" name="urlbarSearchTerms" value="keep"><span>Firefox</span></label>
+            <label><input type="radio" name="urlbarSearchTerms" value="on"><span>On</span></label>
+            <label><input type="radio" name="urlbarSearchTerms" value="off"><span>Off</span></label>
+          </div>
+        </div>
+        <div class="row">
+          <label class="row-label" for="f-urlbarResults">Number of results</label>
+          <select id="f-urlbarResults" name="urlbarResults"></select>
+        </div>
+      </section>
+    </form>
+
+    <aside class="side">
+      <section class="card preview-card">
+        <div class="card-head">
+          <h2>Preview</h2>
+          <div class="preview-toggles">
+            <label class="mini"><input type="checkbox" id="hold-open"> Hold open</label>
+            <label class="mini"><input type="checkbox" id="show-zone"> Show hover zone</label>
+          </div>
+        </div>
+        <div id="preview" class="preview">
+          <div class="pv-window">
+            <div class="pv-toolbox">
+              <div class="pv-nav">
+                <span class="pv-lights"><i></i><i></i><i></i></span>
+                <span class="pv-btn">&#8249;</span><span class="pv-btn">&#8250;</span>
+                <span class="pv-url">example.com/article</span>
+              </div>
+            </div>
+            <div class="pv-bar">
+              <div class="pv-strip">
+                <div class="pv-tab"><i></i><span>Firefox Settings</span></div>
+                <div class="pv-tab selected"><i></i><span>Article you're reading</span></div>
+                <div class="pv-tab hover"><i></i><span>Inbox (3)</span></div>
+                <div class="pv-tab"><i></i><span>Docs: getting started</span></div>
+                <div class="pv-tab"><i></i><span>Weather</span></div>
+                <div class="pv-newtab">+</div>
+              </div>
+            </div>
+            <div class="pv-page">
+              <div class="pv-title"></div>
+              <div class="pv-line"></div><div class="pv-line"></div><div class="pv-line short"></div>
+              <div class="pv-image"></div>
+              <div class="pv-line"></div><div class="pv-line"></div><div class="pv-line"></div><div class="pv-line short"></div>
+            </div>
+          </div>
+        </div>
+        <p class="hint">Move the pointer to the bar's edge to try it. Theme colors are approximated here; Firefox uses your real theme.</p>
+      </section>
+
+      <section class="card apply-card" aria-live="polite">
+        <h2>Apply to Firefox</h2>
+        <div id="helper-box"></div>
+        <div class="actions">
+          <button id="apply" type="button" class="primary">Apply</button>
+          <button id="remove" type="button" class="ghost danger">Remove from Firefox</button>
+        </div>
+      </section>
+
+      <details class="card manual">
+        <summary>Install manually, without the helper</summary>
+        <ol>
+          <li>Open <code>about:config</code> and set the prefs below.</li>
+          <li>Open <code>about:support</code>, find <b>Profile Folder</b> and click <b>Open Folder</b>.</li>
+          <li>Create a folder named <code>chrome</code> there and save the stylesheet into it as <code>userChrome.css</code>.</li>
+          <li>Restart Firefox.</li>
+        </ol>
+        <pre id="manual-prefs" class="code"></pre>
+        <div class="actions">
+          <button id="copy-css" type="button" class="ghost">Copy CSS</button>
+          <button id="download-css" type="button" class="ghost">Download userChrome.css</button>
+        </div>
+        <pre id="css-output" class="code css"></pre>
+      </details>
+
+      <button id="reset" type="button" class="link">Reset all settings to defaults</button>
+    </aside>
+  </main>
+</body>
+</html>
