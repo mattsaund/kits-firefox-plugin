@@ -32,9 +32,11 @@ It tells you when a new version is out; **Download** installs it. What changed:
 
 ## Why a helper
 
-Firefox doesn't let extensions restyle its own tab bar or toolbar. The helper
-writes the extension's stylesheet into your profile's `userChrome.css`, so you
-never edit files.
+Kits Firefox Editor gives you full control over Firefox's own static CSS: the
+stylesheet behind the tab bar, toolbar and address bar themselves, not just
+web pages. Extensions aren't allowed to touch that, and Firefox only reads it
+from your profile's `userChrome.css` at startup. The helper writes the
+extension's stylesheet there for you, so you never edit files.
 
 ## Good to know
 
