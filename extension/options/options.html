@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Auto-Hide Tab Bar</title>
+  <title>Kits Firefox Editor</title>
   <link rel="icon" href="../icons/icon.svg">
   <link rel="stylesheet" href="options.css">
   <script type="module" src="options.js"></script>
@@ -11,7 +11,7 @@
 <body>
   <header class="page-header">
     <img src="../icons/icon.svg" alt="" width="28" height="28">
-    <h1>Auto-Hide Tab Bar</h1>
+    <h1>Kits Firefox Editor</h1>
     <span id="save-indicator" class="save-indicator" aria-live="polite"></span>
   </header>
 
@@ -331,6 +331,15 @@
     </form>
 
     <aside class="side">
+      <section id="update-card" class="card update-card" hidden>
+        <h2 id="update-title"></h2>
+        <p class="hint">Firefox will ask you to confirm the install. Your settings are kept.</p>
+        <div class="actions">
+          <button id="update-download" type="button" class="primary">Download</button>
+          <button id="update-notes" type="button" class="ghost">What's new</button>
+        </div>
+      </section>
+
       <section class="card preview-card">
         <div class="card-head">
           <h2>Preview</h2>
@@ -395,6 +404,11 @@
       </details>
 
       <button id="reset" type="button" class="link">Reset all settings to defaults</button>
+      <p class="version-line">
+        Version <span id="version"></span> ·
+        <button id="check-updates" type="button" class="link">Check for updates</button> ·
+        <a href="https://github.com/mattsaund/kits-firefox-plugin" target="_blank" rel="noopener">GitHub</a>
+      </p>
     </aside>
   </main>
 </body>

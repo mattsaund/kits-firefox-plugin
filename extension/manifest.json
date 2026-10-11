@@ -1,19 +1,21 @@
 {
   "manifest_version": 3,
-  "name": "Auto-Hide Tab Bar",
-  "version": "1.0.0",
-  "description": "An auto-hiding tab bar on any edge of the window (left, right, top or bottom), with size, color and animation settings.",
+  "name": "Kits Firefox Editor",
+  "version": "0.1.0",
+  "description": "Hide Firefox's tab bar and toolbar until you need them. Tabs on any edge, an auto-hiding toolbar, and control over size, color, animation and the address bar.",
   "author": "Matthew Saunders and Austin Laubach",
+  "homepage_url": "https://github.com/mattsaund/kits-firefox-plugin",
   "icons": {
     "48": "icons/icon.svg",
     "96": "icons/icon.svg"
   },
-  "permissions": ["storage", "nativeMessaging"],
+  "permissions": ["storage", "nativeMessaging", "alarms"],
   "background": {
-    "scripts": ["background.js"]
+    "scripts": ["background.js"],
+    "type": "module"
   },
   "action": {
-    "default_title": "Auto-Hide Tab Bar settings",
+    "default_title": "Kits Firefox Editor settings",
     "default_icon": "icons/icon.svg"
   },
   "options_ui": {

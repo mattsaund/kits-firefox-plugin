@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Native messaging helper for the Auto-Hide Tab Bar extension.
+"""Native messaging helper for the Kits Firefox Editor extension.
 
 Firefox extensions can't touch files or restyle the browser UI, so the
 extension sends its generated stylesheet here and this script installs it into
@@ -28,17 +28,17 @@ import sys
 import tempfile
 import time
 
-VERSION = "1.0.0"
+VERSION = "0.1.0"
 
 CSS_FILENAME = "autohide-tab-bar.css"
 BACKUP_SUFFIX = ".ahtb-backup"
 
-IMPORT_BEGIN = "/* BEGIN Auto-Hide Tab Bar (managed by the extension) */"
-IMPORT_END = "/* END Auto-Hide Tab Bar */"
+IMPORT_BEGIN = "/* BEGIN Kits Firefox Editor (managed by the extension) */"
+IMPORT_END = "/* END Kits Firefox Editor */"
 IMPORT_BLOCK = '{}\n@import url("{}");\n{}\n'.format(IMPORT_BEGIN, CSS_FILENAME, IMPORT_END)
 
-USERJS_BEGIN = "// BEGIN Auto-Hide Tab Bar (managed by the extension; edits inside are overwritten)"
-USERJS_END = "// END Auto-Hide Tab Bar"
+USERJS_BEGIN = "// BEGIN Kits Firefox Editor (managed by the extension; edits inside are overwritten)"
+USERJS_END = "// END Kits Firefox Editor"
 
 META_PREFIX = "/* ahtb-meta "
 META_RE = re.compile(r"^/\* ahtb-meta (\{.*\}) \*/$")

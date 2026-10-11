@@ -255,3 +255,12 @@ test("address bar prefs are only written when changed from Firefox's setting", (
 test("an auto-hiding toolbar always keeps a hover strip", () => {
   assert.equal(sanitize({ toolbarAutoHide: true, autoHide: false, triggerSize: 0 }).triggerSize, 2);
 });
+
+test("release versions compare numerically", async () => {
+  globalThis.browser = { runtime: { getManifest: () => ({ version: "0.1.0" }) } };
+  const { compareVersions, currentVersion } = await import("../extension/shared/updates.js");
+  assert.equal(currentVersion(), "0.1.0");
+  assert.equal(compareVersions("0.1.10", "0.1.9"), 1);
+  assert.equal(compareVersions("0.2.0", "0.10.0"), -1);
+  assert.equal(compareVersions("1.0.0", "1.0.0"), 0);
+});

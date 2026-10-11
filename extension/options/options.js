@@ -1,7 +1,9 @@
 import { EASINGS, FIELDS, defaults, firefoxPrefs, isVertical, sanitize } from "../shared/settings.js";
 import { generateCss } from "../shared/generate-css.js";
+import { REPO, compareVersions, currentVersion, storedUpdate } from "../shared/updates.js";
 
 const HOST = "autohide_tab_bar";
+const INSTALL_COMMAND = `curl -fsSL https://github.com/${REPO}/releases/latest/download/install.sh | sh`;
 // Matches the default "Match Firefox's tab height" closely enough for the preview.
 const PREVIEW_AUTO_HEIGHT = 44;
 const MAC_WINDOW_CONTROLS = 76;
@@ -397,8 +399,60 @@ function stateMessages() {
       ),
     );
   }
+
+  if (compareVersions(st.version, currentVersion()) < 0) {
+    out.push(
+      status(
+        "warn",
+        h("p", {}, `The helper is from version ${st.version}. Update it by running the install command again:`),
+        h("pre", { class: "code" }, INSTALL_COMMAND),
+      ),
+    );
+  }
   return out;
 }
+
+// ---------------------------------------------------------------------------
+// Updates
+// ---------------------------------------------------------------------------
+
+const updateCard = document.getElementById("update-card");
+const checkUpdatesButton = document.getElementById("check-updates");
+let shownUpdate = null;
+
+async function renderUpdate() {
+  shownUpdate = await storedUpdate();
+  updateCard.hidden = !shownUpdate;
+  if (shownUpdate) {
+    document.getElementById("update-title").textContent = `Version ${shownUpdate.version} is available`;
+    document.getElementById("update-download").textContent = `Download ${shownUpdate.version}`;
+  }
+}
+
+document.getElementById("update-download").addEventListener("click", () => {
+  if (shownUpdate) browser.tabs.create({ url: shownUpdate.download });
+});
+document.getElementById("update-notes").addEventListener("click", () => {
+  if (shownUpdate) browser.tabs.create({ url: shownUpdate.page });
+});
+
+checkUpdatesButton.addEventListener("click", async () => {
+  checkUpdatesButton.disabled = true;
+  checkUpdatesButton.textContent = "Checking…";
+  let label;
+  try {
+    const update = await browser.runtime.sendMessage({ type: "check-for-update" });
+    label = update ? `${update.version} is available` : "You're up to date";
+  } catch {
+    label = "Couldn't reach GitHub";
+  }
+  await renderUpdate();
+  checkUpdatesButton.textContent = label;
+  setTimeout(() => {
+    checkUpdatesButton.textContent = "Check for updates";
+    checkUpdatesButton.disabled = false;
+  }, 3000);
+});
 
 function renderHelper() {
   const nodes = [];
@@ -409,8 +463,8 @@ function renderHelper() {
       status(
         "warn",
         h("p", {}, "The helper isn't installed yet."),
-        h("p", { class: "sub" }, "Firefox only lets extensions change its tab bar through a small helper program. Install it once by running this from the project folder in a terminal:"),
-        h("pre", { class: "code" }, "./native-host/install.sh"),
+        h("p", { class: "sub" }, "Firefox only lets extensions change its tab bar through a small helper program. Install it once by running this in a terminal:"),
+        h("pre", { class: "code" }, INSTALL_COMMAND),
         h("p", { class: "sub" }, "Or use the manual install below."),
       ),
     );
@@ -529,6 +583,8 @@ document.addEventListener("visibilitychange", () => {
 
 async function init() {
   setupControls();
+  document.getElementById("version").textContent = currentVersion();
+  renderUpdate();
   const stored = await browser.storage.local.get(["settings", "profileOverride"]);
   settings = sanitize(stored.settings ?? {});
   profileOverride = stored.profileOverride ?? null;

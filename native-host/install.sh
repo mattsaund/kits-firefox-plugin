@@ -1,15 +1,21 @@
-#!/usr/bin/env bash
-# Installs the Auto-Hide Tab Bar helper for the current user (macOS or Linux).
+#!/bin/sh
+# Installs (or with --uninstall, removes) the Kits Firefox Editor helper for
+# the current user, on macOS or Linux.
 #
-# Copies the helper out of this folder, so moving or deleting the project later
-# doesn't break it, and registers it with Firefox as a native messaging host.
-# Nothing is written to Firefox profiles here; the extension does that when you
+#   curl -fsSL https://github.com/mattsaund/kits-firefox-plugin/releases/latest/download/install.sh | sh
+#   curl -fsSL https://github.com/mattsaund/kits-firefox-plugin/releases/latest/download/install.sh | sh -s -- --uninstall
+#
+# Run from a checkout it installs the helper next to it; piped from curl it
+# downloads the helper from the latest release. Either way the helper is
+# copied to its own folder and registered with Firefox as a native messaging
+# host. Firefox profiles aren't touched here; the extension does that when you
 # press Apply.
-set -euo pipefail
+set -eu
 
 NAME="autohide_tab_bar"
 EXTENSION_ID="autohide-tab-bar@kits"
-HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+HOST_FILE="autohide_tab_bar_host.py"
+DOWNLOAD="https://github.com/mattsaund/kits-firefox-plugin/releases/latest/download"
 
 case "$(uname -s)" in
   Darwin)
@@ -26,7 +32,15 @@ case "$(uname -s)" in
     ;;
 esac
 
-# Firefox launches the helper with a minimal PATH, so pin an absolute
+if [ "${1:-}" = "--uninstall" ]; then
+  rm -f "$MANIFEST_DIR/$NAME.json" "$INSTALL_DIR/$NAME" "$INSTALL_DIR/$HOST_FILE"
+  rmdir "$INSTALL_DIR" 2>/dev/null || true
+  echo "Removed the Kits Firefox Editor helper."
+  echo "To take the styling out of Firefox, use \"Remove from Firefox\" in the extension first."
+  exit 0
+fi
+
+# Firefox starts the helper with a minimal PATH, so pin an absolute
 # interpreter path now rather than relying on `env python3` later.
 PYTHON=""
 for candidate in "$(command -v python3 || true)" /opt/homebrew/bin/python3 /usr/local/bin/python3 /usr/bin/python3; do
@@ -43,12 +57,24 @@ if [ -z "$PYTHON" ]; then
 fi
 
 mkdir -p "$INSTALL_DIR" "$MANIFEST_DIR"
-cp "$HERE/autohide_tab_bar_host.py" "$INSTALL_DIR/"
+
+# Run as a file from a checkout: use the helper beside it. Piped into sh, $0
+# is the shell itself, so download the helper from the latest release.
+case "$0" in
+  */install.sh) SOURCE="$(cd "$(dirname "$0")" && pwd)/$HOST_FILE" ;;
+  *) SOURCE="" ;;
+esac
+if [ -n "$SOURCE" ] && [ -f "$SOURCE" ]; then
+  cp "$SOURCE" "$INSTALL_DIR/$HOST_FILE"
+else
+  curl -fsSL "$DOWNLOAD/$HOST_FILE" -o "$INSTALL_DIR/$HOST_FILE.download"
+  mv "$INSTALL_DIR/$HOST_FILE.download" "$INSTALL_DIR/$HOST_FILE"
+fi
 
 LAUNCHER="$INSTALL_DIR/$NAME"
 cat > "$LAUNCHER" <<EOF
 #!/bin/sh
-exec "$PYTHON" "$INSTALL_DIR/autohide_tab_bar_host.py" "\$@"
+exec "$PYTHON" "$INSTALL_DIR/$HOST_FILE" "\$@"
 EOF
 chmod 755 "$LAUNCHER"
 
@@ -58,7 +84,7 @@ out, path, ext_id = sys.argv[1:]
 with open(out, "w") as f:
     json.dump({
         "name": "autohide_tab_bar",
-        "description": "Auto-Hide Tab Bar helper: installs the extension's userChrome stylesheet",
+        "description": "Kits Firefox Editor helper: installs the extension's userChrome stylesheet",
         "path": path,
         "type": "stdio",
         "allowed_extensions": [ext_id],
@@ -66,9 +92,6 @@ with open(out, "w") as f:
     f.write("\n")
 EOF
 
-echo "Installed the Auto-Hide Tab Bar helper."
-echo "  helper:   $LAUNCHER"
-echo "  python:   $PYTHON"
-echo "  manifest: $MANIFEST_DIR/$NAME.json"
-echo
+VERSION="$("$PYTHON" -c "import re,sys; print(re.search(r'^VERSION = \"(.+)\"', open(sys.argv[1]).read(), re.M).group(1))" "$INSTALL_DIR/$HOST_FILE")"
+echo "Installed the Kits Firefox Editor helper $VERSION."
 echo "Reopen the extension's settings page and it will connect."

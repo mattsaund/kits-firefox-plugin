@@ -947,3 +947,45 @@ button:disabled {
   font-size: 18px;
   opacity: 0.75;
 }
+
+/* ---- Updates ------------------------------------------------------------- */
+
+.update-card {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, var(--card));
+}
+
+.update-card .actions {
+  margin-top: 10px;
+}
+
+.version-line {
+  margin: 0;
+  padding: 0 4px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.version-line .link {
+  font-size: inherit;
+}
+
+.version-line a {
+  color: inherit;
+}
+
+.update-popup {
+  display: grid;
+  justify-items: start;
+  gap: 6px;
+  padding: 22px 24px;
+}
+
+.update-popup h1 {
+  margin: 6px 0 0;
+  font-size: 17px;
+}
+
+.update-popup .hint {
+  margin: 0;
+}

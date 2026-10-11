@@ -1,0 +1,90 @@
+# Publishes a release when a version is tagged.
+#
+# To release:
+#   1. Set the version in extension/manifest.json, package.json and
+#      native-host/autohide_tab_bar_host.py, and give it a section in CHANGELOG.md.
+#   2. Push to main and wait for ci to pass.
+#   3. git tag v0.2.0 && git push origin v0.2.0
+#
+# The .xpi is signed by addons.mozilla.org as an unlisted (self-distributed)
+# add-on when the AMO_API_KEY and AMO_API_SECRET repository secrets are set.
+# Without them the release carries an unsigned build. Re-running this job for
+# the same tag replaces the release's files, so the secrets can be added later.
+#
+# Installed copies of the extension check the latest release here and offer
+# the new .xpi, so the asset names below are what they look for.
+name: release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Hold the tag, the version strings and the changelog to each other
+        id: version
+        run: |
+          version=$(node -p 'require("./extension/manifest.json").version')
+          echo "manifest.json says $version"
+          [ "$GITHUB_REF_NAME" = "v$version" ] || { echo "::error::tag $GITHUB_REF_NAME, manifest.json $version"; exit 1; }
+          [ "$(node -p 'require("./package.json").version')" = "$version" ] || { echo "::error::package.json version differs"; exit 1; }
+          grep -q "^VERSION = \"$version\"" native-host/autohide_tab_bar_host.py || { echo "::error::helper VERSION differs"; exit 1; }
+          grep -q "^## $version " CHANGELOG.md || { echo "::error::CHANGELOG.md has no section for $version"; exit 1; }
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - run: npm ci
+      - run: npm test
+      - run: npx web-ext lint --source-dir extension --self-hosted
+
+      - name: Build, and sign if the AMO keys are set
+        env:
+          AMO_API_KEY: ${{ secrets.AMO_API_KEY }}
+          AMO_API_SECRET: ${{ secrets.AMO_API_SECRET }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          xpi="dist/kits-firefox-plugin-$VERSION.xpi"
+          mkdir -p dist
+          if [ -n "$AMO_API_KEY" ] && [ -n "$AMO_API_SECRET" ]; then
+            npx web-ext sign --source-dir extension --artifacts-dir dist/signed \
+              --channel unlisted --api-key "$AMO_API_KEY" --api-secret "$AMO_API_SECRET"
+            mv dist/signed/*.xpi "$xpi"
+            echo "SIGNED=yes" >> "$GITHUB_ENV"
+          else
+            echo "::warning::AMO_API_KEY/AMO_API_SECRET not set; publishing an unsigned build"
+            npx web-ext build --source-dir extension --artifacts-dir dist/build
+            mv dist/build/*.zip "$xpi"
+            echo "SIGNED=no" >> "$GITHUB_ENV"
+          fi
+
+      - name: Release notes from the changelog
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          awk -v v="$VERSION" '$0 ~ "^## "v" " {on=1; next} /^## / {on=0} on' CHANGELOG.md > notes.md
+          if [ "$SIGNED" = no ]; then
+            printf '\n> This build is unsigned. Regular Firefox only installs it as a temporary add-on (about:debugging); Firefox Developer Edition and Nightly can install it permanently.\n' >> notes.md
+          fi
+          cat notes.md
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          files="dist/kits-firefox-plugin-$VERSION.xpi native-host/install.sh native-host/autohide_tab_bar_host.py"
+          if gh release view "v$VERSION" >/dev/null 2>&1; then
+            gh release upload "v$VERSION" $files --clobber
+            gh release edit "v$VERSION" --notes-file notes.md
+          else
+            gh release create "v$VERSION" $files --title "v$VERSION" --notes-file notes.md
+          fi

@@ -14,7 +14,7 @@
 
 import { easingCss, isVertical, sanitize } from "./settings.js";
 
-export const PRODUCT_NAME = "Auto-Hide Tab Bar";
+export const PRODUCT_NAME = "Kits Firefox Editor";
 
 // Context menus that can be opened from inside the bar. Firefox drops :hover
 // while one is open, so these keep the bar expanded instead. The content area
