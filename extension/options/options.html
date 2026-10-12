@@ -22,7 +22,8 @@
     <form id="settings" class="settings" autocomplete="off">
 
       <section class="card">
-        <h2>Position</h2>
+        <h2>Layout</h2>
+        <h3 class="first">Tab bar</h3>
         <div class="positions" role="radiogroup" aria-label="Tab bar position">
           <label class="position">
             <input type="radio" name="position" value="left">
@@ -47,58 +48,49 @@
         </div>
         <p class="hint" data-show="vertical">Uses Firefox's vertical tabs.</p>
         <p class="hint" data-show="horizontal">Uses Firefox's horizontal tabs. The window buttons move into the toolbar so they stay reachable.</p>
-        <div class="actions">
-          <button id="reset-layout" type="button" class="ghost">Reset tab bar and toolbar</button>
+        <div class="row">
+          <span class="row-label">Toolbar<small>The row with the address bar</small></span>
+          <div class="segmented">
+            <label><input type="radio" name="toolbarPosition" value="top"><span>Top</span></label>
+            <label><input type="radio" name="toolbarPosition" value="bottom"><span>Bottom</span></label>
+          </div>
         </div>
-        <p class="hint">Back to Firefox's regular layout: tabs along the top, the toolbar below them, neither hiding. Colors and sizes stay. Press Apply to use it.</p>
+        <p class="hint row-hint" data-show-if="toolbarPosition=bottom">Firefox's own title bar turns on, so the window buttons stay at the top.</p>
+        <div class="row">
+          <span class="row-label">Bookmarks bar</span>
+          <div class="segmented">
+            <label><input type="radio" name="bookmarksPosition" value="top"><span>Top</span></label>
+            <label><input type="radio" name="bookmarksPosition" value="bottom"><span>Bottom</span></label>
+          </div>
+        </div>
+        <div class="row order-row" data-show-if="stacked">
+          <span class="row-label">Order<small>Top to bottom, where bars share an edge. Neighbours that both auto-hide open together.</small></span>
+          <input type="hidden" name="barOrder">
+          <ol id="bar-order" class="bar-order" aria-label="Bar order, top to bottom"></ol>
+        </div>
+        <div class="actions">
+          <button id="reset-layout" type="button" class="ghost">Reset layout</button>
+        </div>
+        <p class="hint">Back to Firefox's regular layout: tabs, toolbar and bookmarks bar along the top, none of them hiding. Colors and sizes stay. Press Apply to use it.</p>
       </section>
 
       <section class="card">
-        <h2>Behavior</h2>
-        <p class="hint section-hint">Animation and delays apply to the tab bar and, if it auto-hides, the toolbar.</p>
+        <h2>Tab bar</h2>
         <label class="row">
           <span class="row-label">Auto-hide<small>Collapse when the pointer leaves, open when it reaches the edge</small></span>
           <input type="checkbox" class="switch" name="autoHide">
         </label>
-        <div class="row" data-requires="autoHide">
-          <span class="row-label">When it opens</span>
-          <div class="segmented">
-            <label><input type="radio" name="overlay" value="true"><span>Slide over the page</span></label>
-            <label><input type="radio" name="overlay" value="false"><span>Push the page aside</span></label>
-          </div>
+        <p class="hint row-hint" data-show-if="tabsWithToolbar">On the toolbar's edge the tabs hide along with the toolbar.</p>
+        <div class="row slider" data-requires="autoHide">
+          <label class="row-label" for="f-triggerSize">Hover zone<small>Invisible strip along the edge that opens the tab bar. Larger is easier to hit but covers more of the page edge.</small></label>
+          <input type="range" id="f-triggerSize" name="triggerSize" step="1">
+          <span class="num"><input type="number" data-for="triggerSize" step="1"><em>px</em></span>
         </div>
-        <div class="row slider" data-requires="autoHide|toolbarAutoHide">
-          <label class="row-label" for="f-duration">Animation length<small>0 turns the animation off</small></label>
-          <input type="range" id="f-duration" name="duration" step="10">
-          <span class="num"><input type="number" data-for="duration" step="10"><em>ms</em></span>
+        <div class="row slider" data-requires="autoHide">
+          <label class="row-label" for="f-collapsedSize">Closed size<small>How much stays visible when hidden. 0 hides it completely.</small></label>
+          <input type="range" id="f-collapsedSize" name="collapsedSize" step="1">
+          <span class="num"><input type="number" data-for="collapsedSize" step="1"><em>px</em></span>
         </div>
-        <div class="row" data-requires="autoHide|toolbarAutoHide">
-          <label class="row-label" for="f-easing">Animation style</label>
-          <select id="f-easing" name="easing"></select>
-        </div>
-        <div class="row slider" data-requires="autoHide|toolbarAutoHide">
-          <label class="row-label" for="f-openDelay">Open delay<small>Wait before opening, so brushing past the edge doesn't trigger it</small></label>
-          <input type="range" id="f-openDelay" name="openDelay" step="10">
-          <span class="num"><input type="number" data-for="openDelay" step="10"><em>ms</em></span>
-        </div>
-        <div class="row slider" data-requires="autoHide|toolbarAutoHide">
-          <label class="row-label" for="f-closeDelay">Close delay<small>Grace period after the pointer leaves. Also keeps it open while a right-click menu appears.</small></label>
-          <input type="range" id="f-closeDelay" name="closeDelay" step="10">
-          <span class="num"><input type="number" data-for="closeDelay" step="10"><em>ms</em></span>
-        </div>
-        <label class="row" data-requires="autoHide|toolbarAutoHide">
-          <span class="row-label">Respect "reduce motion"<small>Skip the animation when your system asks for less motion</small></span>
-          <input type="checkbox" class="switch" name="reducedMotion">
-        </label>
-        <!-- Not a setting but Firefox's website access permission; see shared/click-through.js. -->
-        <label class="row" data-requires="autoHide|toolbarAutoHide">
-          <span class="row-label">Let clicks through to the page<small>Pointing at a link or button near the edge doesn't open the bar over it. Rest at the edge for a moment to open it anyway. Needs access to websites, only to see what's under the pointer. Nothing is read or sent.</small></span>
-          <input type="checkbox" class="switch" id="click-through">
-        </label>
-      </section>
-
-      <section class="card">
-        <h2>Size</h2>
         <div class="row slider" data-show="vertical">
           <label class="row-label" for="f-expandedWidth">Open width</label>
           <input type="range" id="f-expandedWidth" name="expandedWidth" step="5">
@@ -126,20 +118,7 @@
           <input type="range" id="f-tabHeight" name="tabHeight" step="1">
           <span class="num"><input type="number" data-for="tabHeight" step="1"><em>px</em></span>
         </div>
-        <div class="row slider" data-requires="autoHide">
-          <label class="row-label" for="f-collapsedSize">Closed size<small>How much stays visible when hidden. 0 hides it completely.</small></label>
-          <input type="range" id="f-collapsedSize" name="collapsedSize" step="1">
-          <span class="num"><input type="number" data-for="collapsedSize" step="1"><em>px</em></span>
-        </div>
-        <div class="row slider" data-requires="autoHide">
-          <label class="row-label" for="f-triggerSize">Hover zone<small>Invisible strip along the edge that opens the tab bar. Larger is easier to hit but covers more of the page edge.</small></label>
-          <input type="range" id="f-triggerSize" name="triggerSize" step="1">
-          <span class="num"><input type="number" data-for="triggerSize" step="1"><em>px</em></span>
-        </div>
-      </section>
-
-      <section class="card">
-        <h2>Look</h2>
+        <h3>Look</h3>
         <div class="row color">
           <span class="row-label">Background</span>
           <div class="segmented small">
@@ -211,27 +190,12 @@
       </section>
 
       <section class="card">
-        <h2>Toolbar</h2>
-        <div class="row">
-          <span class="row-label">Position<small>The row with the address bar</small></span>
-          <div class="segmented">
-            <label><input type="radio" name="toolbarPosition" value="top"><span>Top</span></label>
-            <label><input type="radio" name="toolbarPosition" value="bottom"><span>Bottom</span></label>
-          </div>
-        </div>
-        <p class="hint row-hint" data-show-if="toolbarPosition=bottom">Firefox's own title bar turns on, so the window buttons stay at the top.</p>
-        <div class="row" data-show-if="sharedEdge">
-          <span class="row-label">Tabs<small>The tab bar is on the same edge as the toolbar</small></span>
-          <div class="segmented">
-            <label><input type="radio" name="tabsAboveToolbar" value="true"><span>Above the toolbar</span></label>
-            <label><input type="radio" name="tabsAboveToolbar" value="false"><span>Below the toolbar</span></label>
-          </div>
-        </div>
+        <h2>Toolbar and address bar</h2>
         <label class="row">
           <span class="row-label">Auto-hide the toolbar<small>Slides in when the pointer reaches its edge. Stays open while you type in the address bar or a menu is open.</small></span>
           <input type="checkbox" class="switch" name="toolbarAutoHide">
         </label>
-        <p class="hint row-hint" data-show-if="sharedEdge&amp;toolbarAutoHide">The tabs on this edge hide along with the toolbar.</p>
+        <p class="hint row-hint" data-show-if="toolbarShared&amp;toolbarAutoHide">Bars on the toolbar's edge hide along with it.</p>
         <div class="row slider" data-requires="toolbarAutoHide">
           <label class="row-label" for="f-toolbarTriggerSize">Hover zone<small>Invisible strip along the edge that opens the toolbar</small></label>
           <input type="range" id="f-toolbarTriggerSize" name="toolbarTriggerSize" step="1">
@@ -253,10 +217,7 @@
           </div>
           <input type="color" name="toolbarIconColor" aria-label="Toolbar icon color" data-requires="toolbarIconCustom">
         </div>
-      </section>
-
-      <section class="card">
-        <h2>Address bar</h2>
+        <h3>Address bar</h3>
         <div class="row color">
           <span class="row-label">Background</span>
           <div class="segmented small">
@@ -333,8 +294,7 @@
           <input type="range" id="f-urlbarMaxWidth" name="urlbarMaxWidth" step="10">
           <span class="num"><input type="number" data-for="urlbarMaxWidth" step="10"><em>px</em></span>
         </div>
-
-        <h3>Behavior</h3>
+        <h3>Address bar behavior</h3>
         <p class="hint section-hint">These change Firefox settings. "Firefox" leaves whatever you chose in Firefox's own settings alone.</p>
         <div class="row">
           <span class="row-label">Show full addresses<small>Keep https:// and the full path visible</small></span>
@@ -385,6 +345,17 @@
             <label><input type="radio" name="bookmarksVisibility" value="never"><span>Never</span></label>
           </div>
         </div>
+        <label class="row">
+          <span class="row-label">Auto-hide<small>Collapse when the pointer leaves, open when it reaches the bar's hover zone</small></span>
+          <input type="checkbox" class="switch" name="bookmarksAutoHide">
+        </label>
+        <p class="hint row-hint" data-show-if="bookmarksWithToolbar">On the toolbar's edge it hides along with the toolbar.</p>
+        <div class="row slider" data-requires="bookmarksAutoHide">
+          <label class="row-label" for="f-bookmarksTriggerSize">Hover zone<small>Invisible strip on the page side that opens the bookmarks bar</small></label>
+          <input type="range" id="f-bookmarksTriggerSize" name="bookmarksTriggerSize" step="1">
+          <span class="num"><input type="number" data-for="bookmarksTriggerSize" step="1"><em>px</em></span>
+        </div>
+        <h3>Look</h3>
         <div class="row color">
           <span class="row-label">Background</span>
           <div class="segmented small">
@@ -430,6 +401,46 @@
         <label class="row">
           <span class="row-label">Icons only<small>Hide the names, keep the icons</small></span>
           <input type="checkbox" class="switch" name="bookmarksIconsOnly">
+        </label>
+      </section>
+
+      <section class="card">
+        <h2>Opening and closing</h2>
+        <p class="hint section-hint">For every bar that auto-hides.</p>
+        <div class="row" data-requires="autoHide|bookmarksAutoHide">
+          <span class="row-label">When a bar opens<small>The toolbar always slides over the page</small></span>
+          <div class="segmented">
+            <label><input type="radio" name="overlay" value="true"><span>Slide over the page</span></label>
+            <label><input type="radio" name="overlay" value="false"><span>Push the page aside</span></label>
+          </div>
+        </div>
+        <div class="row slider" data-requires="autoHide|toolbarAutoHide|bookmarksAutoHide">
+          <label class="row-label" for="f-duration">Animation length<small>0 turns the animation off</small></label>
+          <input type="range" id="f-duration" name="duration" step="10">
+          <span class="num"><input type="number" data-for="duration" step="10"><em>ms</em></span>
+        </div>
+        <div class="row" data-requires="autoHide|toolbarAutoHide|bookmarksAutoHide">
+          <label class="row-label" for="f-easing">Animation style</label>
+          <select id="f-easing" name="easing"></select>
+        </div>
+        <div class="row slider" data-requires="autoHide|toolbarAutoHide|bookmarksAutoHide">
+          <label class="row-label" for="f-openDelay">Open delay<small>Wait before opening, so brushing past the edge doesn't trigger it</small></label>
+          <input type="range" id="f-openDelay" name="openDelay" step="10">
+          <span class="num"><input type="number" data-for="openDelay" step="10"><em>ms</em></span>
+        </div>
+        <div class="row slider" data-requires="autoHide|toolbarAutoHide|bookmarksAutoHide">
+          <label class="row-label" for="f-closeDelay">Close delay<small>Grace period after the pointer leaves. Also keeps it open while a right-click menu appears.</small></label>
+          <input type="range" id="f-closeDelay" name="closeDelay" step="10">
+          <span class="num"><input type="number" data-for="closeDelay" step="10"><em>ms</em></span>
+        </div>
+        <label class="row" data-requires="autoHide|toolbarAutoHide|bookmarksAutoHide">
+          <span class="row-label">Respect "reduce motion"<small>Skip the animation when your system asks for less motion</small></span>
+          <input type="checkbox" class="switch" name="reducedMotion">
+        </label>
+        <!-- Not a setting but Firefox's website access permission; see shared/click-through.js. -->
+        <label class="row" data-requires="autoHide|toolbarAutoHide|bookmarksAutoHide">
+          <span class="row-label">Let clicks through to the page<small>Pointing at a link or button near the edge doesn't open the bar over it. Rest at the edge for a moment to open it anyway. Needs access to websites, only to see what's under the pointer. Nothing is read or sent.</small></span>
+          <input type="checkbox" class="switch" id="click-through">
         </label>
       </section>
     </form>
@@ -480,6 +491,8 @@
                 <div class="pv-newtab">+</div>
               </div>
             </div>
+            <!-- Bars on the other edge from the toolbar; the script fills it. -->
+            <div class="pv-edge"></div>
             <div class="pv-page">
               <div class="pv-title"></div>
               <div class="pv-line"></div><div class="pv-line"></div><div class="pv-line short"></div>

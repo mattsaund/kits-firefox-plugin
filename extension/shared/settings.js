@@ -19,6 +19,18 @@ export const EASINGS = [
 // Three-way choice for settings backed by a Firefox pref.
 export const TRI = ["keep", "on", "off"];
 
+// The horizontal bars, which stack up when they share an edge.
+export const BARS = ["tabs", "toolbar", "bookmarks"];
+
+/** Every arrangement of a list. */
+function permutations(list) {
+  if (list.length <= 1) return [list];
+  return list.flatMap((item, i) => permutations([...list.slice(0, i), ...list.slice(i + 1)]).map((rest) => [item, ...rest]));
+}
+
+// The order of bars sharing an edge, top to bottom, as "tabs,toolbar,bookmarks".
+export const BAR_ORDERS = permutations(BARS).map((order) => order.join(","));
+
 // Field builders: each field knows its type, its limits and its default.
 const int = (min, max, def) => ({ type: "int", min, max, default: def });
 const bool = (def) => ({ type: "bool", default: def });
@@ -33,6 +45,8 @@ const MAX_HOVER_ZONE = 100;
 // every color left to the Firefox theme.
 export const FIELDS = {
   position: oneOf(POSITIONS, "left"),
+  // Bars on the same edge, top to bottom. Firefox's own is tabs, toolbar, bookmarks.
+  barOrder: oneOf(BAR_ORDERS, "tabs,toolbar,bookmarks"),
 
   autoHide: bool(true),
   // true: the bar slides over the page. false: the page shrinks to make room.
@@ -76,8 +90,6 @@ export const FIELDS = {
 
   // Toolbar (the row with the address bar). Shares the animation settings above.
   toolbarPosition: oneOf(["top", "bottom"], "top"),
-  // With the tabs on the toolbar's edge: tab strip above (true) or below it.
-  tabsAboveToolbar: bool(true),
   toolbarAutoHide: bool(false),
   // The hidden toolbar keeps nothing visible but this strip, so it can't be 0.
   toolbarTriggerSize: int(2, MAX_HOVER_ZONE, 10),
@@ -104,6 +116,9 @@ export const FIELDS = {
 
   // Bookmarks toolbar. Showing it is Firefox's own setting; "keep" leaves it alone.
   bookmarksVisibility: oneOf(["keep", "always", "newtab", "never"], "keep"),
+  bookmarksPosition: oneOf(["top", "bottom"], "top"),
+  bookmarksAutoHide: bool(false),
+  bookmarksTriggerSize: int(2, MAX_HOVER_ZONE, 10),
   bookmarksBgCustom: bool(false),
   bookmarksBgColor: color("#2b2a33"),
   bookmarksTextCustom: bool(false),
@@ -126,15 +141,17 @@ export const FIELDS = {
   urlbarResults: int(0, 20, 0),
 };
 
-// Firefox's own layout: horizontal tabs along the top, above the toolbar, and
-// neither of them hiding. "Reset tab bar and toolbar" on the settings page
-// puts these over the current settings; looks and sizes stay as they are.
+// Firefox's own layout: tabs, toolbar and bookmarks bar along the top in that
+// order, none of them hiding. "Reset layout" on the settings page puts these
+// over the current settings; looks and sizes stay as they are.
 export const REGULAR_LAYOUT = {
   position: "top",
   autoHide: false,
   toolbarPosition: "top",
-  tabsAboveToolbar: true,
   toolbarAutoHide: false,
+  bookmarksPosition: "top",
+  bookmarksAutoHide: false,
+  barOrder: "tabs,toolbar,bookmarks",
 };
 
 const COLOR_RE = /^#[0-9a-f]{6}$/i;
@@ -173,12 +190,76 @@ export function sanitize(raw) {
   if (s.autoHide && s.collapsedSize + s.triggerSize < 2) {
     s.triggerSize = 2 - s.collapsedSize;
   }
+  // Before 0.4.1 only the tabs had an order, above or below the toolbar, and
+  // the bookmarks bar always sat with the toolbar.
+  if (!BAR_ORDERS.includes(src.barOrder) && src.tabsAboveToolbar === false) {
+    s.barOrder = "toolbar,bookmarks,tabs";
+  }
+  if (!FIELDS.bookmarksPosition.values.includes(src.bookmarksPosition)) {
+    s.bookmarksPosition = s.toolbarPosition;
+  }
   return s;
 }
 
 /** Whether a tab bar position uses Firefox's vertical tabs. */
 export function isVertical(position) {
   return position === "left" || position === "right";
+}
+
+/**
+ * Where the horizontal bars sit. The toolbar's edge holds the bars inside
+ * Firefox's toolbox; bars on the other edge are separate strips there.
+ *
+ *   stacks:  for "top" and "bottom", the bars on that edge from the window's
+ *            edge inward (the last one meets the page)
+ *   hiding:  per bar, "own" (its own hover zone), "toolbar" (along with an
+ *            auto-hiding toolbar) or null (always shown)
+ *   groups:  per bar that hides on its own, the run of neighbours on its edge
+ *            that also do; they open together, from the innermost one's zone
+ */
+export function barLayout(settings) {
+  const s = sanitize(settings);
+  const toolbarEdge = s.toolbarPosition;
+  const edgeOf = { tabs: isVertical(s.position) ? null : s.position, toolbar: toolbarEdge, bookmarks: s.bookmarksPosition };
+  const stacks = { top: [], bottom: [] };
+  for (const bar of s.barOrder.split(",")) {
+    if (edgeOf[bar]) stacks[edgeOf[bar]].push(bar);
+  }
+  // The order runs top to bottom; at the bottom the window's edge comes last.
+  stacks.bottom.reverse();
+
+  const ownSwitch = { tabs: s.autoHide, toolbar: s.toolbarAutoHide, bookmarks: s.bookmarksAutoHide };
+  const hiding = {};
+  for (const bar of BARS) {
+    if (!edgeOf[bar]) hiding[bar] = null;
+    else if (bar !== "toolbar" && edgeOf[bar] === toolbarEdge && s.toolbarAutoHide) hiding[bar] = "toolbar";
+    else hiding[bar] = ownSwitch[bar] ? "own" : null;
+  }
+
+  const groups = {};
+  for (const stack of Object.values(stacks)) {
+    let run = [];
+    for (const bar of [...stack, null]) {
+      if (bar && bar !== "toolbar" && hiding[bar] === "own") {
+        run.push(bar);
+      } else {
+        for (const member of run) groups[member] = run;
+        run = [];
+      }
+    }
+  }
+  return {
+    toolbarEdge,
+    otherEdge: toolbarEdge === "top" ? "bottom" : "top",
+    edgeOf,
+    stacks,
+    hiding,
+    groups,
+    /** Bars on the toolbar's edge, inside the toolbox. */
+    inToolbox: (bar) => edgeOf[bar] === toolbarEdge,
+    /** Bars on the other edge, as fixed strips. */
+    fixed: stacks[toolbarEdge === "top" ? "bottom" : "top"],
+  };
 }
 
 /**
@@ -189,21 +270,21 @@ export function isVertical(position) {
  */
 export function edgeZones(settings) {
   const s = sanitize(settings);
-  const zones = new Map();
-  const add = (edge, size) => {
-    if (size > 0) zones.set(edge, Math.max(size, zones.get(edge) ?? 0));
-  };
-  const tabsOnToolbarEdge = !isVertical(s.position) && s.position === s.toolbarPosition;
-  if (s.autoHide && !tabsOnToolbarEdge) add(s.position, s.triggerSize);
-  // Tabs on the toolbar's edge hide along with an auto-hiding toolbar, through
-  // its zone. Next to a toolbar that stays, their zone reaches over the page
-  // only from the page's side of the toolbar.
-  if (s.autoHide && tabsOnToolbarEdge && !s.toolbarAutoHide) {
-    const onPageSide = s.position === "top" ? !s.tabsAboveToolbar : s.tabsAboveToolbar;
-    if (onPageSide) add(s.position, s.triggerSize);
+  const L = barLayout(s);
+  const zones = [];
+  if (isVertical(s.position) && s.autoHide && s.triggerSize > 0) zones.push({ edge: s.position, size: s.triggerSize });
+  const ownZone = { tabs: s.triggerSize, bookmarks: s.bookmarksTriggerSize };
+  for (const edge of ["top", "bottom"]) {
+    // An auto-hiding toolbar takes everything on its edge with it.
+    if (edge === L.toolbarEdge && s.toolbarAutoHide) {
+      zones.push({ edge, size: s.toolbarTriggerSize });
+      continue;
+    }
+    // Otherwise the bar that meets the page reaches over it, if it hides.
+    const inner = L.stacks[edge].at(-1);
+    if (inner && L.hiding[inner] === "own" && ownZone[inner] > 0) zones.push({ edge, size: ownZone[inner] });
   }
-  if (s.toolbarAutoHide) add(s.toolbarPosition, s.toolbarTriggerSize);
-  return [...zones].map(([edge, size]) => ({ edge, size }));
+  return zones;
 }
 
 /** The CSS timing function for an animation style id. */

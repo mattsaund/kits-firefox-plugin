@@ -1,9 +1,9 @@
 # Kits Editor for Firefox
 
-Hide Firefox's tab bar and toolbar until you need them, so the page gets the
-whole window. Tabs on any edge, the address bar on the top or bottom, and
-every size, color and speed of the tabs, toolbar, address bar and bookmarks
-bar set from a settings page inside Firefox, with a live preview.
+Hide Firefox's tab bar, toolbar and bookmarks bar until you need them, so the
+page gets the whole window. Tabs on any edge, the toolbar and bookmarks bar on
+the top or bottom in the order you like, and every size, color and speed set
+from a settings page inside Firefox, with a live preview.
 
 ## Install
 
@@ -63,9 +63,9 @@ else and sends nothing anywhere.
 
 - Only tab icons, no titles? Click Firefox's sidebar button once.
 - A bar opens over a link near the edge, like a site's profile picture? Turn
-  on **Let clicks through to the page** under Behavior.
-- Want Firefox's regular tab bar and toolbar back? **Reset tab bar and
-  toolbar** under Position, then **Apply**.
+  on **Let clicks through to the page** under Opening and closing.
+- Want Firefox's regular layout back? **Reset layout** under Layout, then
+  **Apply**.
 
 ## Remove
 

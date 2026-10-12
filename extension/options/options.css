@@ -187,6 +187,10 @@ code {
   font-weight: 650;
 }
 
+.card h3.first {
+  margin-top: 0;
+}
+
 .section-hint {
   margin: -4px 0 6px;
 }
@@ -216,8 +220,50 @@ code {
 }
 
 .card h2 + .row,
-.card h2 + .positions {
+.card h2 + .positions,
+.card h3 + .row {
   border-top: none;
+}
+
+/* The bar order: a short list, top to bottom, with buttons to move each bar. */
+.bar-order {
+  display: grid;
+  gap: 4px;
+  min-width: 230px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.bar-order li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto auto;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 3px 3px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--field);
+}
+
+/* Side tabs don't stack with the horizontal bars. */
+.bar-order li.aside {
+  opacity: 0.55;
+}
+
+.order-name {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.order-edge {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.bar-order .order-move {
+  padding: 2px 9px;
+  border-radius: 6px;
 }
 
 .row.slider {
@@ -671,33 +717,36 @@ a.primary {
   user-select: none;
 }
 
+/* The script puts the horizontal bars in order: those on the toolbar's edge
+   into .pv-toolbox, where Firefox keeps them too, the others into .pv-edge on
+   the opposite edge. Side tabs get a column. */
 .preview[data-position="left"] .pv-window {
-  grid-template: "nav nav" auto "bar page" 1fr / auto 1fr;
+  grid-template: "nav nav" auto "bar page" 1fr "edge edge" auto / auto 1fr;
 }
 .preview[data-position="right"] .pv-window {
-  grid-template: "nav nav" auto "page bar" 1fr / 1fr auto;
+  grid-template: "nav nav" auto "page bar" 1fr "edge edge" auto / 1fr auto;
 }
-/* Tabs on the toolbar's edge: the script moves the bar into .pv-toolbox,
-   above or below the nav row, which is where Firefox's tab strip lives too. */
-.preview[data-position="top"] .pv-window {
-  grid-template: "nav" auto "page" 1fr / 1fr;
-}
-.preview[data-position="bottom"] .pv-window {
-  grid-template: "nav" auto "page" 1fr "bar" auto / 1fr;
+.preview:is([data-position="top"], [data-position="bottom"]) .pv-window {
+  grid-template: "nav" auto "page" 1fr "edge" auto / 1fr;
 }
 
 /* Toolbar at the bottom, with Firefox's own title bar at the top. */
 .preview[data-toolbar="bottom"][data-position="left"] .pv-window {
-  grid-template: "title title" auto "bar page" 1fr "nav nav" auto / auto 1fr;
+  grid-template: "title title" auto "edge edge" auto "bar page" 1fr "nav nav" auto / auto 1fr;
 }
 .preview[data-toolbar="bottom"][data-position="right"] .pv-window {
-  grid-template: "title title" auto "page bar" 1fr "nav nav" auto / 1fr auto;
+  grid-template: "title title" auto "edge edge" auto "page bar" 1fr "nav nav" auto / 1fr auto;
 }
-.preview[data-toolbar="bottom"][data-position="top"] .pv-window {
-  grid-template: "title" auto "bar" auto "page" 1fr "nav" auto / 1fr;
+.preview[data-toolbar="bottom"]:is([data-position="top"], [data-position="bottom"]) .pv-window {
+  grid-template: "title" auto "edge" auto "page" 1fr "nav" auto / 1fr;
 }
-.preview[data-toolbar="bottom"][data-position="bottom"] .pv-window {
-  grid-template: "title" auto "page" 1fr "nav" auto / 1fr;
+
+.pv-edge {
+  grid-area: edge;
+  position: relative;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
 }
 
 .pv-titlebar {
@@ -737,12 +786,14 @@ a.primary {
   background: var(--tb-bg, var(--pv-window));
 }
 
-/* The bookmarks bar, under the nav row; its look falls back to the toolbar's. */
+/* The bookmarks bar; its look falls back to the toolbar's. */
 .pv-bookmarks {
   display: flex;
   align-items: center;
   gap: 2px;
-  padding: 0 10px 4px;
+  box-sizing: border-box;
+  height: var(--bx, 28px);
+  padding: 0 10px;
   overflow: hidden;
   color: var(--bm-text, var(--tb-icon, var(--muted)));
   background: var(--bm-bg, var(--tb-bg, var(--pv-window)));
@@ -751,6 +802,48 @@ a.primary {
 
 .preview.bm-hidden .pv-bookmarks {
   display: none;
+}
+
+/* Hiding on its own: the tab strip's arithmetic, with nothing left visible. */
+.preview.bm-autohide .pv-bookmarks {
+  position: relative;
+  z-index: 2;
+  height: var(--bt);
+  border: 0 solid var(--zone);
+  background-clip: padding-box;
+  transition-property: height, margin;
+  transition-duration: var(--d);
+  transition-timing-function: var(--e);
+  transition-delay: var(--cd);
+}
+.preview.bm-autohide[data-bookmarks="top"] .pv-bookmarks {
+  border-bottom-width: var(--bt);
+  margin-bottom: calc(-1 * var(--bt));
+  align-items: flex-end;
+}
+.preview.bm-autohide[data-bookmarks="bottom"] .pv-bookmarks {
+  border-top-width: var(--bt);
+  margin-top: calc(-1 * var(--bt));
+  align-items: flex-start;
+}
+.preview.bm-autohide .pv-bookmarks:hover,
+.preview.bm-autohide.hold .pv-bookmarks {
+  height: calc(var(--bx) + var(--bt));
+  transition-delay: var(--od);
+}
+.preview.bm-autohide.overlay[data-bookmarks="top"] .pv-bookmarks:hover,
+.preview.bm-autohide.overlay.hold[data-bookmarks="top"] .pv-bookmarks {
+  margin-bottom: calc(0px - var(--bx) - var(--bt));
+}
+.preview.bm-autohide.overlay[data-bookmarks="bottom"] .pv-bookmarks:hover,
+.preview.bm-autohide.overlay.hold[data-bookmarks="bottom"] .pv-bookmarks {
+  margin-top: calc(0px - var(--bx) - var(--bt));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .preview.reduced .pv-bookmarks {
+    transition-duration: 0s;
+  }
 }
 
 .pv-bm {

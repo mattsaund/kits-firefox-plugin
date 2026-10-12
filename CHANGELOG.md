@@ -3,6 +3,21 @@
 Each version is a `v` tag, with the extension and helper on its
 [release page](https://github.com/mattsaund/kits-firefox-plugin/releases).
 
+## 0.4.1 — 2026-10-12
+
+- **Put the bookmarks bar on the top or bottom**, with the toolbar or on the
+  other edge.
+- **Order the bars.** Where bars share an edge, stack the tab bar, toolbar
+  and bookmarks bar in any order, top to bottom.
+- **The bookmarks bar can auto-hide**, with its own hover zone. Bars next to
+  each other that both auto-hide open together. On an auto-hiding toolbar's
+  edge, bars hide along with it.
+- **Reorganized settings**: Layout first (where each bar goes, and the
+  order), then a section for each bar, then Opening and closing.
+- A tab strip below the toolbar that auto-hides now opens. Before, its hover
+  zone was clipped away.
+- Press **Apply** after updating. No helper update needed.
+
 ## 0.4.0 — 2026-10-12
 
 - **Let clicks through to the page**, a new switch under Behavior. Pointing

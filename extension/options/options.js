@@ -2,7 +2,17 @@
 // (Apply / Remove), the list of what Apply changes, update checks and "Let
 // clicks through to the page".
 
-import { EASINGS, FIELDS, REGULAR_LAYOUT, defaults, easingCss, firefoxPrefs, isVertical, sanitize } from "../shared/settings.js";
+import {
+  EASINGS,
+  FIELDS,
+  REGULAR_LAYOUT,
+  barLayout,
+  defaults,
+  easingCss,
+  firefoxPrefs,
+  isVertical,
+  sanitize,
+} from "../shared/settings.js";
 import { CLICK_THROUGH_ACCESS, clickThroughAllowed } from "../shared/click-through.js";
 import { generateCss, hexToRgba } from "../shared/generate-css.js";
 import {
@@ -140,16 +150,23 @@ function writeForm(s) {
   }
 }
 
-/** Tab bar and toolbar on the same edge (tabs sit inside the toolbar area). */
-function sharedEdge() {
-  return !isVertical(settings.position) && settings.position === settings.toolbarPosition;
-}
+// Conditions worked out from where the bars sit (see barLayout), for
+// data-show-if and data-requires alongside the settings themselves.
+const DERIVED = {
+  // Two bars or more share an edge, so their order matters.
+  stacked: (L) => L.stacks.top.length > 1 || L.stacks.bottom.length > 1,
+  // Other bars sit on the toolbar's edge.
+  toolbarShared: (L) => L.stacks[L.toolbarEdge].length > 1,
+  // The tabs or the bookmarks bar hide along with an auto-hiding toolbar.
+  tabsWithToolbar: (L) => L.hiding.tabs === "toolbar",
+  bookmarksWithToolbar: (L) => L.hiding.bookmarks === "toolbar",
+};
 
-/** One term: "key", "!key" or "key=value". "sharedEdge" is derived. */
+/** One term: "key", "!key" or "key=value", a setting or one of DERIVED. */
 function termMet(term) {
   const negate = term.startsWith("!");
   const [key, expected] = (negate ? term.slice(1) : term).split("=");
-  const value = key === "sharedEdge" ? sharedEdge() : settings[key];
+  const value = key in DERIVED ? DERIVED[key](barLayout(settings)) : settings[key];
   const met = expected === undefined ? Boolean(value) : String(value) === expected;
   return negate ? !met : met;
 }
@@ -181,6 +198,61 @@ function updateDependents() {
 }
 
 // ---------------------------------------------------------------------------
+// Bar order
+// ---------------------------------------------------------------------------
+
+const BAR_NAMES = { tabs: "Tab bar", toolbar: "Toolbar", bookmarks: "Bookmarks bar" };
+const orderInput = form.elements.barOrder;
+const orderList = document.getElementById("bar-order");
+
+/** The order list: each bar, where it is, and buttons to move it up or down. */
+function renderOrder() {
+  const L = barLayout(settings);
+  const order = settings.barOrder.split(",");
+  const items = order.map((bar, i) => {
+    const edge = L.edgeOf[bar];
+    const move = (step, arrow, word) =>
+      h(
+        "button",
+        {
+          type: "button",
+          class: "ghost order-move",
+          "data-bar": bar,
+          "data-step": step,
+          "aria-label": `Move ${BAR_NAMES[bar].toLowerCase()} ${word}`,
+          disabled: !order[i + step],
+        },
+        arrow,
+      );
+    return h(
+      "li",
+      { class: edge ? null : "aside" },
+      h("span", { class: "order-name" }, BAR_NAMES[bar]),
+      h("span", { class: "order-edge" }, edge ?? `${settings.position} side`),
+      move(-1, "↑", "up"),
+      move(1, "↓", "down"),
+    );
+  });
+  orderList.replaceChildren(...items);
+}
+
+orderList.addEventListener("click", (e) => {
+  const button = e.target.closest("button[data-bar]");
+  if (!button) return;
+  const { bar } = button.dataset;
+  const step = Number(button.dataset.step);
+  const order = settings.barOrder.split(",");
+  const i = order.indexOf(bar);
+  [order[i], order[i + step]] = [order[i + step], order[i]];
+  // Through the form, like any other control.
+  orderInput.value = order.join(",");
+  orderInput.dispatchEvent(new Event("input", { bubbles: true }));
+  // The list was redrawn; keep the keyboard on the bar that moved.
+  const again = orderList.querySelector(`[data-bar="${bar}"][data-step="${step}"]:not(:disabled)`);
+  (again ?? orderList.querySelector(`[data-bar="${bar}"]:not(:disabled)`))?.focus();
+});
+
+// ---------------------------------------------------------------------------
 // Preview, generated CSS
 // ---------------------------------------------------------------------------
 
@@ -192,7 +264,7 @@ function updateDependents() {
 function renderPreview() {
   const s = settings;
   const vertical = isVertical(s.position);
-  const shared = sharedEdge();
+  const L = barLayout(s);
   const tabHeight = s.tabHeightCustom ? s.tabHeight : PREVIEW_TAB_HEIGHT;
   // Firefox's strip is the tab height plus a 6px margin above and below.
   const autoHeight = tabHeight + 12;
@@ -200,21 +272,30 @@ function renderPreview() {
   const style = preview.style;
   const set = (prop, value) => (value == null ? style.removeProperty(prop) : style.setProperty(prop, value));
 
-  // Tabs on the toolbar's edge sit inside the toolbox, above or below the nav
-  // row, as in Firefox; otherwise they are their own row of the window.
-  const bar = preview.querySelector(".pv-bar");
+  // Bars on the toolbar's edge sit inside the toolbox in their order, as in
+  // Firefox; bars on the other edge stack in a row of their own. Side tabs
+  // have their own column.
+  const rows = {
+    tabs: preview.querySelector(".pv-bar"),
+    toolbar: preview.querySelector(".pv-nav"),
+    bookmarks: preview.querySelector(".pv-bookmarks"),
+  };
+  const topDown = (edge) => (edge === "top" ? L.stacks.top : [...L.stacks.bottom].reverse());
   const toolbox = preview.querySelector(".pv-toolbox");
-  if (shared && s.tabsAboveToolbar) toolbox.prepend(bar);
-  else if (shared) toolbox.append(bar);
-  else preview.querySelector(".pv-window").insertBefore(bar, preview.querySelector(".pv-page"));
+  const otherEdge = preview.querySelector(".pv-edge");
+  for (const bar of topDown(L.toolbarEdge)) toolbox.append(rows[bar]);
+  for (const bar of topDown(L.otherEdge)) otherEdge.append(rows[bar]);
+  if (vertical) preview.querySelector(".pv-window").insertBefore(rows.tabs, preview.querySelector(".pv-page"));
 
   // Layout and behavior.
   preview.dataset.position = s.position;
   preview.dataset.toolbar = s.toolbarPosition;
+  preview.dataset.bookmarks = s.bookmarksPosition;
   preview.classList.toggle("overlay", s.overlay);
   preview.classList.toggle("static", !s.autoHide);
   preview.classList.toggle("tb-autohide", s.toolbarAutoHide);
-  preview.classList.toggle("tabs-in-toolbox", shared && s.toolbarAutoHide);
+  preview.classList.toggle("tabs-in-toolbox", L.hiding.tabs === "toolbar");
+  preview.classList.toggle("bm-autohide", L.hiding.bookmarks === "own");
   preview.classList.toggle("shadow", s.autoHide && s.shadow);
   preview.classList.toggle("reduced", s.reducedMotion);
   preview.classList.toggle("hold", holdOpen.checked);
@@ -224,6 +305,7 @@ function renderPreview() {
   set("--x", `${expanded}px`);
   set("--t", `${s.triggerSize}px`);
   set("--tbt", `${s.toolbarTriggerSize}px`);
+  set("--bt", `${s.bookmarksTriggerSize}px`);
   set("--pv-tab-h", `${tabHeight}px`);
   set("--d", `${s.duration}ms`);
   set("--e", easingCss(s.easing));
@@ -236,10 +318,11 @@ function renderPreview() {
   set("--sel-text", s.selectedTextCustom ? s.selectedTextColor : null);
   set("--hov", s.hoverCustom ? s.hoverColor : null);
   set("--tab-radius", s.radiusCustom ? `${s.radius}px` : null);
-  set("--zone", showZone.checked && (s.autoHide || s.toolbarAutoHide) ? "color-mix(in srgb, var(--accent) 30%, transparent)" : null);
-  // The strip slides over the nav row only when it sits above it at the top.
-  const overNavRow = shared && s.position === "top" && s.tabsAboveToolbar;
-  set("--mac-pad", overNavRow && s.autoHide && s.overlay && !s.toolbarAutoHide ? `${MAC_WINDOW_CONTROLS}px` : null);
+  const anyHides = s.autoHide || s.toolbarAutoHide || s.bookmarksAutoHide;
+  set("--zone", showZone.checked && anyHides ? "color-mix(in srgb, var(--accent) 30%, transparent)" : null);
+  // A tab strip at the very top slides over the window controls when it opens.
+  const overControls = L.toolbarEdge === "top" && L.stacks.top[0] === "tabs" && L.hiding.tabs === "own" && s.overlay;
+  set("--mac-pad", overControls ? `${MAC_WINDOW_CONTROLS}px` : null);
 
   // Toolbar and address bar look.
   set("--tb-bg", s.toolbarBgCustom ? s.toolbarBgColor : null);
@@ -258,6 +341,8 @@ function renderPreview() {
   set("--bm-bg", s.bookmarksBgCustom ? s.bookmarksBgColor : null);
   set("--bm-text", s.bookmarksTextCustom ? s.bookmarksTextColor : null);
   set("--bm-h", s.bookmarksHeightCustom ? `${s.bookmarksHeight}px` : null);
+  // The bar: its bookmarks plus Firefox's 2px margin above and below.
+  set("--bx", `${(s.bookmarksHeightCustom ? s.bookmarksHeight : 24) + 4}px`);
   set("--bm-font", s.bookmarksFontCustom ? `${s.bookmarksFontSize}px` : null);
 
   const w = s.edgeWidth;
@@ -337,6 +422,7 @@ function scheduleSave() {
 /** Everything that follows a settings change. */
 function onSettingsChanged() {
   updateDependents();
+  renderOrder();
   renderPreview();
   refreshDerived();
   scheduleSave();
@@ -711,7 +797,7 @@ confirmable(resetButton, "Click again to reset everything", () => {
   onSettingsChanged();
   flashLabel(resetButton, "Reset. Press Apply to use it.", 4000);
 });
-confirmable(resetLayoutButton, "Click again to reset the tab bar and toolbar", () => {
+confirmable(resetLayoutButton, "Click again to reset the layout", () => {
   settings = sanitize({ ...settings, ...REGULAR_LAYOUT });
   writeForm(settings);
   onSettingsChanged();
@@ -796,6 +882,7 @@ async function init() {
   profileOverride = stored.profileOverride ?? null;
   writeForm(settings);
   updateDependents();
+  renderOrder();
   renderPreview();
   await refreshDerived();
   await refreshStatus();

@@ -6,7 +6,16 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import { generateCss } from "../extension/shared/generate-css.js";
-import { POSITIONS, REGULAR_LAYOUT, defaults, edgeZones, firefoxPrefs, isVertical, sanitize } from "../extension/shared/settings.js";
+import {
+  POSITIONS,
+  REGULAR_LAYOUT,
+  barLayout,
+  defaults,
+  edgeZones,
+  firefoxPrefs,
+  isVertical,
+  sanitize,
+} from "../extension/shared/settings.js";
 
 const ALL_CUSTOM = {
   backgroundCustom: true,
@@ -37,13 +46,13 @@ function variants() {
   for (const position of POSITIONS) {
     for (const autoHide of [true, false]) {
       for (const overlay of [true, false]) {
-        for (const [toolbarAutoHide, toolbarPosition, tabsAboveToolbar] of [
-          [false, "top", true],
-          [true, "top", true],
-          [false, "top", false],
-          [true, "bottom", true],
-          [false, "bottom", false],
-          [true, "bottom", false],
+        for (const [toolbarAutoHide, toolbarPosition, barOrder] of [
+          [false, "top", "tabs,toolbar,bookmarks"],
+          [true, "top", "tabs,toolbar,bookmarks"],
+          [false, "top", "toolbar,bookmarks,tabs"],
+          [true, "bottom", "tabs,toolbar,bookmarks"],
+          [false, "bottom", "bookmarks,tabs,toolbar"],
+          [true, "bottom", "toolbar,tabs,bookmarks"],
         ]) {
           for (const extra of [
             {},
@@ -53,7 +62,14 @@ function variants() {
             { expandedHeightAuto: false },
             { tabHeightCustom: true, shadow: true },
           ]) {
-            out.push({ ...defaults(), position, autoHide, overlay, toolbarAutoHide, toolbarPosition, tabsAboveToolbar, ...extra });
+            for (const bookmarks of [
+              { bookmarksPosition: toolbarPosition },
+              { bookmarksPosition: toolbarPosition === "top" ? "bottom" : "top" },
+              { bookmarksPosition: toolbarPosition, bookmarksAutoHide: true },
+              { bookmarksPosition: toolbarPosition === "top" ? "bottom" : "top", bookmarksAutoHide: true },
+            ]) {
+              out.push({ ...defaults(), position, autoHide, overlay, toolbarAutoHide, toolbarPosition, barOrder, ...bookmarks, ...extra });
+            }
           }
         }
       }
@@ -328,27 +344,34 @@ test("toolbar at the bottom moves the toolbox, flips the address bar results and
   assert.equal(firefoxPrefs({ toolbarPosition: "bottom" })["browser.tabs.inTitlebar"], 0);
   assert.ok(!("browser.tabs.inTitlebar" in firefoxPrefs({ toolbarPosition: "top" })));
 
-  const hidden = generateCss({ ...defaults(), toolbarPosition: "bottom", toolbarAutoHide: true });
+  const hidden = generateCss({ ...defaults(), toolbarPosition: "bottom", bookmarksPosition: "bottom", toolbarAutoHide: true });
   assert.match(hidden, /translate: 0 calc\(100% - var\(--ahtb-toolbar-trigger\)\) !important;/);
   assert.match(hidden, /border-top: var\(--ahtb-toolbar-trigger\) solid transparent !important;/);
 });
 
 test("tabs on the other edge from the toolbar are a fixed strip; on the same edge they are ordered", () => {
-  const topTabsBottomBar = generateCss({ ...defaults(), position: "top", toolbarPosition: "bottom" });
-  assert.match(topTabsBottomBar, /position: fixed !important;\n  inset: 0 0 auto 0 !important;/);
+  const topTabsBottomBar = generateCss({ ...defaults(), position: "top", toolbarPosition: "bottom", bookmarksPosition: "bottom" });
+  assert.match(topTabsBottomBar, /#TabsToolbar \{\n  position: fixed !important;\n  inset-inline: 0 !important;\n  bottom: auto !important;\n  top: 0px !important;/);
   assert.match(topTabsBottomBar, /#browser \{\n  margin-top: var\(--ahtb-collapsed\) !important;/);
 
-  const wiped = generateCss({ ...defaults(), position: "top", toolbarPosition: "bottom", toolbarAutoHide: true });
+  const wiped = generateCss({ ...defaults(), position: "top", toolbarPosition: "bottom", bookmarksPosition: "bottom", toolbarAutoHide: true });
   assert.match(wiped, /clip-path: inset\(100% 0 0 0\) !important;/);
   assert.match(wiped, /#navigator-toolbox::before \{[^}]*inset: auto 0 0 0 !important;/);
 
-  const below = generateCss({ ...defaults(), position: "top", tabsAboveToolbar: false });
-  assert.match(below, /#TabsToolbar \{\n  order: 10 !important;/);
+  // Saved before 0.4.1 as "tabs below the toolbar".
+  const below = generateCss({ ...defaults(), position: "top", tabsAboveToolbar: false, barOrder: undefined });
+  assert.match(below, /#nav-bar \{\n  order: 1 !important;/);
+  assert.match(below, /#PersonalToolbar \{\n  order: 2 !important;/);
+  assert.match(below, /#TabsToolbar \{\n  order: 3 !important;/);
+  assert.match(below, /#notifications-toolbar \{\n  order: 4 !important;/);
   assert.match(below, /#nav-bar > \.titlebar-buttonbox-container/);
   assert.doesNotMatch(below, /-moz-platform: macos/);
+  // Firefox's own order needs no rules.
+  assert.doesNotMatch(generateCss({ ...defaults(), position: "top" }), /order: /);
 
-  const bottomBoth = generateCss({ ...defaults(), position: "bottom", toolbarPosition: "bottom" });
-  assert.match(bottomBoth, /position: relative !important;\n  margin-top: calc\(-1 \* var\(--ahtb-trigger\)\) !important;/);
+  const bottomBoth = generateCss({ ...defaults(), position: "bottom", toolbarPosition: "bottom", bookmarksPosition: "bottom" });
+  assert.match(bottomBoth, /position: relative !important;\n  z-index: 10 !important;/);
+  assert.match(bottomBoth, /margin-top: calc\(-1 \* var\(--ahtb-trigger\)\) !important;/);
   assert.doesNotMatch(bottomBoth, /position: fixed/);
 });
 
@@ -407,38 +430,40 @@ test("hover zones over the page, for the click-through page script", () => {
   assert.deepEqual(edgeZones({ ...defaults(), collapsedSize: 8, triggerSize: 0 }), []);
   // Tabs on the other edge from the toolbar have their own zone.
   assert.deepEqual(edgeZones({ ...defaults(), position: "bottom", toolbarAutoHide: true }), [
-    { edge: "bottom", size: 10 },
     { edge: "top", size: 10 },
+    { edge: "bottom", size: 10 },
   ]);
   // Tabs on the toolbar's edge hide with an auto-hiding toolbar, through its zone...
   assert.deepEqual(edgeZones({ ...defaults(), position: "top", toolbarAutoHide: true, toolbarTriggerSize: 30 }), [
     { edge: "top", size: 30 },
   ]);
   // ...and next to a toolbar that stays, reach the page only from its page side.
-  assert.deepEqual(edgeZones({ ...defaults(), position: "top", tabsAboveToolbar: true }), []);
-  assert.deepEqual(edgeZones({ ...defaults(), position: "top", tabsAboveToolbar: false }), [{ edge: "top", size: 10 }]);
-  assert.deepEqual(edgeZones({ ...defaults(), position: "bottom", toolbarPosition: "bottom", tabsAboveToolbar: true }), [
-    { edge: "bottom", size: 10 },
+  assert.deepEqual(edgeZones({ ...defaults(), position: "top", barOrder: "tabs,toolbar,bookmarks" }), []);
+  assert.deepEqual(edgeZones({ ...defaults(), position: "top", barOrder: "toolbar,bookmarks,tabs" }), [{ edge: "top", size: 10 }]);
+  const bottomBoth = { ...defaults(), position: "bottom", toolbarPosition: "bottom", bookmarksPosition: "bottom" };
+  assert.deepEqual(edgeZones({ ...bottomBoth, barOrder: "tabs,toolbar,bookmarks" }), [{ edge: "bottom", size: 10 }]);
+  assert.deepEqual(edgeZones({ ...bottomBoth, barOrder: "toolbar,bookmarks,tabs" }), []);
+  // A bookmarks bar that hides on its own and meets the page.
+  assert.deepEqual(edgeZones({ ...defaults(), bookmarksAutoHide: true, bookmarksTriggerSize: 14 }), [
+    { edge: "left", size: 10 },
+    { edge: "top", size: 14 },
   ]);
-  assert.deepEqual(edgeZones({ ...defaults(), position: "bottom", toolbarPosition: "bottom", tabsAboveToolbar: false }), []);
 });
 
 test("pointing at something clickable near an edge lets the pointer through every hover zone", () => {
   const signal = ":has(#pageAction-urlbar-autohide-tab-bar_kits)";
   for (const s of variants()) {
     const css = generateCss(s);
-    const label = `${s.position} autoHide=${s.autoHide} toolbar=${s.toolbarPosition} toolbarAutoHide=${s.toolbarAutoHide}`;
+    const L = barLayout(s);
+    const label = `${s.position} autoHide=${s.autoHide} toolbar=${s.toolbarPosition} toolbarAutoHide=${s.toolbarAutoHide} bookmarks=${s.bookmarksPosition}`;
     // The page action is only a signal; its icon is never shown.
     assert.match(css, /#pageAction-urlbar-autohide-tab-bar_kits \{\n  display: none !important;/, label);
     const through = (target) => css.indexOf(`${signal} ${target} {\n  pointer-events: none !important;`);
-    const tabsInToolbox = !isVertical(s.position) && s.position === s.toolbarPosition;
     if (s.autoHide && isVertical(s.position)) assert.ok(through("#sidebar-container") > 0, label);
-    if (s.autoHide && !isVertical(s.position) && !(tabsInToolbox && s.toolbarAutoHide)) {
-      assert.ok(through("#TabsToolbar") > 0, label);
-    }
+    if (L.hiding.tabs === "own") assert.ok(through("#TabsToolbar") > 0, label);
+    if (L.hiding.bookmarks === "own") assert.ok(through("#PersonalToolbar") > 0, label);
     if (s.toolbarAutoHide) {
-      const wipe = !isVertical(s.position) && !tabsInToolbox;
-      if (wipe) {
+      if (L.fixed.length) {
         assert.ok(through("#navigator-toolbox::before") > 0, label);
       } else {
         // A toolbar held open (typing, a menu) takes the pointer back.
@@ -496,4 +521,85 @@ test("bookmarks bar: Firefox's show setting, and a look of its own", () => {
   // It comes after the toolbar's look, which also reaches the bookmarks bar.
   const toolbarLook = generateCss({ ...defaults(), toolbarBgCustom: true, bookmarksBgCustom: true });
   assert.ok(toolbarLook.indexOf(":is(#nav-bar, #PersonalToolbar)") < toolbarLook.indexOf("#PersonalToolbar#PersonalToolbar"));
+});
+
+test("bar order and placement: saved settings from before 0.4.1 keep their layout", () => {
+  // Tabs below the toolbar, and a bookmarks bar that sat with a bottom toolbar.
+  assert.equal(sanitize({ tabsAboveToolbar: false }).barOrder, "toolbar,bookmarks,tabs");
+  assert.equal(sanitize({ tabsAboveToolbar: true }).barOrder, "tabs,toolbar,bookmarks");
+  assert.equal(sanitize({ toolbarPosition: "bottom" }).bookmarksPosition, "bottom");
+  assert.equal(sanitize({ toolbarPosition: "bottom", bookmarksPosition: "top" }).bookmarksPosition, "top");
+  assert.equal(sanitize({ barOrder: "tabs,tabs,toolbar" }).barOrder, "tabs,toolbar,bookmarks");
+  // Reset layout puts every bar back where Firefox has it.
+  const reset = sanitize({ ...defaults(), position: "left", bookmarksPosition: "bottom", bookmarksAutoHide: true, barOrder: "bookmarks,toolbar,tabs", ...REGULAR_LAYOUT });
+  assert.deepEqual(barLayout(reset).stacks, { top: ["tabs", "toolbar", "bookmarks"], bottom: [] });
+});
+
+test("bars on an edge stack in order; neighbours that both hide form one group", () => {
+  const L = barLayout({ ...defaults(), position: "bottom", bookmarksPosition: "bottom", bookmarksAutoHide: true, barOrder: "toolbar,tabs,bookmarks" });
+  // Window edge first: at the bottom the order is read upward.
+  assert.deepEqual(L.stacks, { top: ["toolbar"], bottom: ["bookmarks", "tabs"] });
+  assert.deepEqual(L.groups.tabs, ["bookmarks", "tabs"]);
+  // A toolbar that stays splits them up.
+  const split = barLayout({ ...defaults(), position: "top", bookmarksAutoHide: true, barOrder: "tabs,toolbar,bookmarks" });
+  assert.deepEqual(split.groups, { tabs: ["tabs"], bookmarks: ["bookmarks"] });
+  // An auto-hiding toolbar takes the bars on its edge with it.
+  const along = barLayout({ ...defaults(), position: "top", toolbarAutoHide: true, bookmarksAutoHide: true });
+  assert.deepEqual(along.hiding, { tabs: "toolbar", toolbar: "own", bookmarks: "toolbar" });
+});
+
+test("bookmarks bar hiding in the toolbox reaches out of it", () => {
+  const css = generateCss({ ...defaults(), bookmarksAutoHide: true });
+  // Out of the toolbox's clip and above the page.
+  assert.match(css, /#navigator-toolbox \{\n  z-index: 3 !important;\n  overflow: visible !important;/);
+  assert.match(css, /#PersonalToolbar \{\n  box-sizing: border-box !important;\n  min-height: calc\(0px \+ var\(--ahtb-bm-trigger\)\) !important;/);
+  assert.match(css, /border-bottom: var\(--ahtb-bm-trigger\) solid transparent !important;/);
+  // Sliding open over the page, which stays put.
+  assert.match(css, /margin-bottom: calc\(0px - var\(--ahtb-bm-height\) - var\(--ahtb-bm-trigger\)\) !important;/);
+  assert.ok(css.includes(':has(#PersonalToolbar [open]:not([open="false"])) #PersonalToolbar'));
+  assert.ok(css.includes(":has(#placesContext :is(menu, menuitem)[_moz-menuactive]) #PersonalToolbar"));
+  // Its size, or nothing while Firefox hides the bar.
+  assert.match(css, /--ahtb-bm-height: 28px;/);
+  assert.match(css, /:root:has\(#PersonalToolbar\[collapsed\]:not\(\[collapsed="false"\]\)\) \{\n  --ahtb-bm-height: 0px !important;/);
+  assert.match(generateCss({ ...defaults(), bookmarksHeightCustom: true, bookmarksHeight: 30 }), /--ahtb-bm-height: 34px;/);
+});
+
+test("bars on the other edge are fixed strips, stacked, with the page kept clear", () => {
+  const one = generateCss({ ...defaults(), bookmarksPosition: "bottom" });
+  assert.match(one, /#PersonalToolbar \{\n  position: fixed !important;\n  inset-inline: 0 !important;\n  top: auto !important;\n  bottom: 0px !important;/);
+  assert.match(one, /#browser \{\n  margin-bottom: var\(--ahtb-bm-height\) !important;/);
+
+  // Tabs outermost and always open, the bookmarks bar inside them, hiding.
+  const stacked = generateCss({ ...defaults(), position: "bottom", autoHide: false, bookmarksPosition: "bottom", bookmarksAutoHide: true, barOrder: "toolbar,bookmarks,tabs" });
+  assert.match(stacked, /#PersonalToolbar \{\n  position: fixed !important;\n  inset-inline: 0 !important;\n  top: auto !important;\n  bottom: var\(--ahtb-expanded\) !important;/);
+  assert.match(stacked, /#browser \{\n  margin-bottom: var\(--ahtb-expanded\) !important;/);
+
+  // Both hiding: one group; the inner bar moves out as the outer one opens.
+  const group = generateCss({ ...defaults(), position: "bottom", bookmarksPosition: "bottom", bookmarksAutoHide: true, barOrder: "toolbar,tabs,bookmarks" });
+  assert.match(group, /#TabsToolbar \{\n  position: fixed !important;\n  inset-inline: 0 !important;\n  top: auto !important;\n  bottom: 0px !important;/);
+  assert.ok(group.includes(":has(#TabsToolbar:hover) #PersonalToolbar"));
+  assert.ok(group.includes(":has(#PersonalToolbar:hover) #TabsToolbar"));
+  assert.match(group, /bottom: var\(--ahtb-bm-height\) !important;\n  transition-delay: var\(--ahtb-open-delay\) !important;/);
+
+  // Pushing the page, it makes room for the open group.
+  const push = generateCss({ ...defaults(), position: "bottom", overlay: false, bookmarksPosition: "bottom", bookmarksAutoHide: true, barOrder: "toolbar,tabs,bookmarks" });
+  assert.match(push, /margin-bottom: calc\(var\(--ahtb-bm-height\) \+ var\(--ahtb-expanded\)\) !important;/);
+});
+
+test("an auto-hiding toolbar with strips on the other edge wipes its rows", () => {
+  const css = generateCss({ ...defaults(), toolbarAutoHide: true, bookmarksPosition: "bottom" });
+  assert.doesNotMatch(stripComments(css), /translate:/);
+  assert.ok(css.includes("#navigator-toolbox:hover:not(:has(#PersonalToolbar:hover))"));
+  assert.match(css, /:root:not\(\[inFullscreen\], \[customizing\]\) #PersonalToolbar \{\n  pointer-events: auto !important;/);
+  // The rows left in the toolbox are the ones that get wiped.
+  assert.ok(css.includes("#navigator-toolbox > :is(#nav-bar, #toolbar-menubar)"));
+});
+
+test("bars in the toolbox follow the chosen order", () => {
+  const css = generateCss({ ...defaults(), barOrder: "bookmarks,toolbar,tabs" });
+  assert.match(css, /#PersonalToolbar \{\n  order: 1 !important;/);
+  assert.match(css, /#toolbar-menubar,\n:root:not\(\[inFullscreen\], \[customizing\]\) #nav-bar \{\n  order: 2 !important;/);
+  // Read upward at the bottom: the last in the order sits at the window's edge.
+  const bottom = generateCss({ ...defaults(), toolbarPosition: "bottom", bookmarksPosition: "bottom", barOrder: "bookmarks,toolbar,tabs" });
+  assert.match(bottom, /#PersonalToolbar \{\n  order: 1 !important;/);
 });
