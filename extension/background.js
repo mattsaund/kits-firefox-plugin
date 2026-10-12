@@ -50,7 +50,7 @@ async function showBadge() {
   await browser.action.setBadgeText({ text: update ? "1" : "" });
   await browser.action.setBadgeBackgroundColor({ color: "#6e4be6" });
   await browser.action.setTitle({
-    title: update ? `Kits Firefox Editor ${update.version} is available` : "Kits Firefox Editor settings",
+    title: update ? `Kits Editor for Firefox ${update.version} is available` : "Kits Editor for Firefox settings",
   });
 }
 

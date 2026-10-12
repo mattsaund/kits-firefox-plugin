@@ -1,4 +1,4 @@
-# Installs (or with -Uninstall, removes) the Kits Firefox Editor helper for
+# Installs (or with -Uninstall, removes) the Kits Editor for Firefox helper for
 # the current user on Windows.
 #
 #   irm https://github.com/mattsaund/kits-firefox-plugin/releases/latest/download/install.ps1 | iex
@@ -26,7 +26,7 @@ $RegistryKey = "HKCU:\Software\Mozilla\NativeMessagingHosts\$Name"
 if ($Uninstall) {
   Remove-Item -Path $RegistryKey -Recurse -Force -ErrorAction SilentlyContinue
   Remove-Item -Path $InstallDir -Recurse -Force -ErrorAction SilentlyContinue
-  Write-Host "Removed the Kits Firefox Editor helper."
+  Write-Host "Removed the Kits Editor for Firefox helper."
   Write-Host 'To take the styling out of Firefox, use "Remove from Firefox" in the extension first.'
   return
 }
@@ -79,7 +79,7 @@ $Batch = "@echo off`r`n`"$Python`" `"%~dp0$HostFile`" %*`r`n"
 $ManifestPath = Join-Path $InstallDir "$Name.json"
 $Manifest = [ordered]@{
   name = $Name
-  description = "Kits Firefox Editor helper: installs the extension's userChrome stylesheet"
+  description = "Kits Editor for Firefox helper: installs the extension's userChrome stylesheet"
   path = $Launcher
   type = "stdio"
   allowed_extensions = @($ExtensionId)
@@ -92,5 +92,5 @@ Set-Item -Path $RegistryKey -Value $ManifestPath
 # (No double quotes inside the code: Windows PowerShell 5.1 mangles them in
 # arguments to native programs, hence \x22.)
 $Version = & $Python -c "import re, sys; print(re.search(r'^VERSION = \x22(.+)\x22', open(sys.argv[1], encoding='utf-8').read(), re.M).group(1))" $Target
-Write-Host "Installed the Kits Firefox Editor helper $Version."
+Write-Host "Installed the Kits Editor for Firefox helper $Version."
 Write-Host "Reopen the extension's settings page and it will connect."

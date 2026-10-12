@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
-  "name": "Kits Firefox Editor",
-  "version": "0.2.0",
+  "name": "Kits Editor for Firefox",
+  "version": "0.2.1",
   "description": "Hide Firefox's tab bar and toolbar until you need them. Tabs on any edge, an auto-hiding toolbar, and control over size, color, animation and the address bar.",
   "author": "Matthew Saunders and Austin Laubach",
   "homepage_url": "https://github.com/mattsaund/kits-firefox-plugin",
@@ -15,7 +15,7 @@
     "type": "module"
   },
   "action": {
-    "default_title": "Kits Firefox Editor settings",
+    "default_title": "Kits Editor for Firefox settings",
     "default_icon": "icons/icon.svg"
   },
   "options_ui": {

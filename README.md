@@ -1,4 +1,4 @@
-# Kits Firefox Editor
+# Kits Editor for Firefox
 
 Hide Firefox's tab bar and toolbar until you need them, so the page gets the
 whole window. Tabs on any edge, an auto-hiding address bar, and every size,
@@ -32,7 +32,7 @@ It tells you when a new version is out; **Download** installs it. What changed:
 
 ## Why a helper
 
-Kits Firefox Editor gives you full control over Firefox's own static CSS: the
+Kits Editor for Firefox gives you full control over Firefox's own static CSS: the
 stylesheet behind the tab bar, toolbar and address bar themselves, not just
 web pages. Extensions aren't allowed to touch that, and Firefox only reads it
 from your profile's `userChrome.css` at startup. The helper writes the

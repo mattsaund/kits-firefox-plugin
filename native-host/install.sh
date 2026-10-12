@@ -1,5 +1,5 @@
 #!/bin/sh
-# Installs (or with --uninstall, removes) the Kits Firefox Editor helper for
+# Installs (or with --uninstall, removes) the Kits Editor for Firefox helper for
 # the current user, on macOS or Linux.
 #
 #   curl -fsSL https://github.com/mattsaund/kits-firefox-plugin/releases/latest/download/install.sh | sh
@@ -35,7 +35,7 @@ esac
 if [ "${1:-}" = "--uninstall" ]; then
   rm -f "$MANIFEST_DIR/$NAME.json" "$INSTALL_DIR/$NAME" "$INSTALL_DIR/$HOST_FILE"
   rmdir "$INSTALL_DIR" 2>/dev/null || true
-  echo "Removed the Kits Firefox Editor helper."
+  echo "Removed the Kits Editor for Firefox helper."
   echo "To take the styling out of Firefox, use \"Remove from Firefox\" in the extension first."
   exit 0
 fi
@@ -84,7 +84,7 @@ out, path, ext_id = sys.argv[1:]
 with open(out, "w") as f:
     json.dump({
         "name": "autohide_tab_bar",
-        "description": "Kits Firefox Editor helper: installs the extension's userChrome stylesheet",
+        "description": "Kits Editor for Firefox helper: installs the extension's userChrome stylesheet",
         "path": path,
         "type": "stdio",
         "allowed_extensions": [ext_id],
@@ -93,5 +93,5 @@ with open(out, "w") as f:
 EOF
 
 VERSION="$("$PYTHON" -c "import re,sys; print(re.search(r'^VERSION = \"(.+)\"', open(sys.argv[1]).read(), re.M).group(1))" "$INSTALL_DIR/$HOST_FILE")"
-echo "Installed the Kits Firefox Editor helper $VERSION."
+echo "Installed the Kits Editor for Firefox helper $VERSION."
 echo "Reopen the extension's settings page and it will connect."

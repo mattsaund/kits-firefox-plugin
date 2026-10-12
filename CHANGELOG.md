@@ -3,6 +3,12 @@
 Each version is a `v` tag, with the extension and helper on its
 [release page](https://github.com/mattsaund/kits-firefox-plugin/releases).
 
+## 0.2.1 — 2026-10-11
+
+- **Signed by Mozilla**, so regular Firefox installs it permanently.
+- Renamed to **Kits Editor for Firefox**: Mozilla only allows "Firefox" in
+  an add-on's name as "… for Firefox".
+
 ## 0.2.0 — 2026-10-11
 
 - **Windows.** A PowerShell one-liner installs the helper and registers it
