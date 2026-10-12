@@ -3,6 +3,13 @@
 Each version is a `v` tag, with the extension and helper on its
 [release page](https://github.com/mattsaund/kits-firefox-plugin/releases).
 
+## 0.3.1 — 2026-10-11
+
+- **New icon:** a yellow-orange `.>.` turned upside down, on the toolbar
+  button and everywhere else.
+- No new helper needed: the settings page only asks for a helper update
+  when a release changes it.
+
 ## 0.3.0 — 2026-10-11
 
 - **Bars stay put when the pointer leaves Firefox's sight.** Pushing against

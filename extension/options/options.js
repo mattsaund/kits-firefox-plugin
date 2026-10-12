@@ -504,7 +504,10 @@ function stateMessages() {
     );
   }
 
-  if (compareVersions(st.version, currentVersion()) < 0) {
+  // Helper changes ship in minor versions; a patch release of the extension
+  // alone doesn't need a new helper, so only major.minor is compared.
+  const minor = (version) => version.split(".").slice(0, 2).concat("0").join(".");
+  if (compareVersions(minor(st.version), minor(currentVersion())) < 0) {
     out.push(
       status(
         "warn",
