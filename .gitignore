@@ -3,3 +3,4 @@ dist/
 web-ext-artifacts/
 __pycache__/
 .DS_Store
+.amo-upload-uuid
