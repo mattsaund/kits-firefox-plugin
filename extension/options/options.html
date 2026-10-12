@@ -47,6 +47,10 @@
         </div>
         <p class="hint" data-show="vertical">Uses Firefox's vertical tabs.</p>
         <p class="hint" data-show="horizontal">Uses Firefox's horizontal tabs. The window buttons move into the toolbar so they stay reachable.</p>
+        <div class="actions">
+          <button id="reset-layout" type="button" class="ghost">Reset tab bar and toolbar</button>
+        </div>
+        <p class="hint">Back to Firefox's regular layout: tabs along the top, the toolbar below them, neither hiding. Colors and sizes stay. Press Apply to use it.</p>
       </section>
 
       <section class="card">
@@ -424,6 +428,7 @@
           <p>Pressing Apply lets Kits Editor for Firefox, through its helper program:</p>
           <ul>
             <li>write your design to <code>userChrome.css</code> in this Firefox profile</li>
+            <li>set aside anything else in <code>userChrome.css</code>, so old edits can't get in the way. It's kept as <code>userChrome.css.ahtb-backup</code>, and Remove from Firefox puts it back.</li>
             <li id="apply-prefs-intro">change these Firefox settings:</li>
           </ul>
           <ul id="apply-prefs" class="pref-list"></ul>

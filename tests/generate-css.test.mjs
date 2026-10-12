@@ -6,7 +6,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import { generateCss } from "../extension/shared/generate-css.js";
-import { POSITIONS, defaults, firefoxPrefs, sanitize } from "../extension/shared/settings.js";
+import { POSITIONS, REGULAR_LAYOUT, defaults, firefoxPrefs, sanitize } from "../extension/shared/settings.js";
 
 const ALL_CUSTOM = {
   backgroundCustom: true,
@@ -349,4 +349,47 @@ test("tabs on the other edge from the toolbar are a fixed strip; on the same edg
   const bottomBoth = generateCss({ ...defaults(), position: "bottom", toolbarPosition: "bottom" });
   assert.match(bottomBoth, /position: relative !important;\n  margin-top: calc\(-1 \* var\(--ahtb-trigger\)\) !important;/);
   assert.doesNotMatch(bottomBoth, /position: fixed/);
+});
+
+test("the hidden toolbar's hover zone lets the pointer through to a side tab bar in use", () => {
+  for (const position of ["left", "right"]) {
+    for (const autoHide of [true, false]) {
+      const css = generateCss({ ...defaults(), position, autoHide, toolbarAutoHide: true });
+      const through = css.indexOf(":root:not([inFullscreen], [customizing]):has(#sidebar-container:hover) #navigator-toolbox");
+      assert.ok(through > 0, `${position} autoHide=${autoHide}`);
+      assert.ok(css.includes(":has(#tabbrowser-tabs[movingtab]) #navigator-toolbox,"));
+      assert.match(css, /#navigator-toolbox \{\n  pointer-events: none !important;/);
+      // The open toolbar takes the pointer back; it has to come later to win.
+      const back = css.indexOf("pointer-events: auto !important;");
+      assert.ok(back > through, "the open rule must follow the pass-through rule");
+    }
+  }
+  assert.doesNotMatch(generateCss({ ...defaults(), position: "top", toolbarAutoHide: true }), /pointer-events/);
+  assert.doesNotMatch(generateCss(defaults()), /pointer-events/);
+});
+
+test("hover zones go up to 100px", () => {
+  assert.equal(sanitize({ triggerSize: 100 }).triggerSize, 100);
+  assert.equal(sanitize({ triggerSize: 250 }).triggerSize, 100);
+  assert.equal(sanitize({ toolbarTriggerSize: 100 }).toolbarTriggerSize, 100);
+  assert.equal(sanitize({ toolbarTriggerSize: 250 }).toolbarTriggerSize, 100);
+  const css = generateCss({ ...defaults(), triggerSize: 80, toolbarAutoHide: true, toolbarTriggerSize: 90 });
+  assert.match(css, /--ahtb-trigger: 80px;/);
+  assert.match(css, /--ahtb-toolbar-trigger: 90px;/);
+});
+
+test("the regular layout is Firefox's own: top tabs, toolbar below, nothing hiding", () => {
+  const custom = { ...defaults(), ...ALL_CUSTOM, triggerSize: 60, position: "right", toolbarPosition: "bottom", toolbarAutoHide: true };
+  const s = sanitize({ ...custom, ...REGULAR_LAYOUT });
+  // Looks and sizes stay as they were.
+  assert.equal(s.backgroundOpacity, 80);
+  assert.equal(s.triggerSize, 60);
+  const bare = stripComments(generateCss(s));
+  for (const pattern of [/#sidebar-container/, /#navigator-toolbox/, /^\s*(min|max)-height:/m, /translate|position: fixed/]) {
+    assert.doesNotMatch(bare, pattern);
+  }
+  assert.deepEqual(firefoxPrefs(s), {
+    "toolkit.legacyUserProfileCustomizations.stylesheets": true,
+    "sidebar.verticalTabs": false,
+  });
 });

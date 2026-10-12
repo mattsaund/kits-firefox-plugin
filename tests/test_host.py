@@ -46,21 +46,19 @@ def read(path):
         return f.read()
 
 
-class UserChromeImport(unittest.TestCase):
-    def test_goes_first_and_is_idempotent(self):
-        once = host.with_import("#nav-bar { color: red; }\n")
-        self.assertTrue(once.startswith(host.IMPORT_BEGIN))
-        self.assertIn("#nav-bar { color: red; }", once)
-        self.assertEqual(host.with_import(once), once)
-
-    def test_stays_after_charset(self):
-        out = host.with_import('@charset "UTF-8";\n@namespace url(x);\n')
-        self.assertTrue(out.startswith('@charset "UTF-8";\n' + host.IMPORT_BEGIN))
-        self.assertLess(out.index("@import"), out.index("@namespace"))
-
-    def test_strip_leaves_user_content(self):
+class UserChromeOwnRules(unittest.TestCase):
+    def test_own_rules_are_everything_but_our_block(self):
         original = "/* mine */\n.a { color: red; }\n"
-        self.assertEqual(host.strip_block(host.with_import(original), host.IMPORT_BEGIN, host.IMPORT_END), original)
+        self.assertEqual(host.own_rules(host.IMPORT_BLOCK + original), original)
+        self.assertEqual(host.own_rules(None), "")
+
+    def test_merge_keeps_both_without_repeating(self):
+        self.assertEqual(host.merge_rules(None, ".b{}\n"), ".b{}\n")
+        self.assertEqual(host.merge_rules(".a{}\n", ".a{}\n"), ".a{}\n")
+        self.assertEqual(host.merge_rules(".a{}\n", ".a{}\n.b{}\n"), ".a{}\n.b{}\n")
+        self.assertEqual(host.merge_rules(".a{}\n.b{}\n", ".b{}\n"), ".a{}\n.b{}\n")
+        self.assertEqual(host.merge_rules(".a{}", ".b{}\n"), ".a{}\n\n.b{}\n")
+        self.assertEqual(host.merge_rules(".a{}\n", "  \n"), ".a{}\n")
 
 
 class UserJs(unittest.TestCase):
@@ -138,10 +136,11 @@ class Profiles(unittest.TestCase):
         self.assertTrue(res["profile"]["isRunning"])
         self.assertEqual(res["stylesheetsPref"], False)
 
-        user_chrome = read(os.path.join(chrome, "userChrome.css"))
-        self.assertTrue(user_chrome.startswith(host.IMPORT_BEGIN))
-        self.assertIn(".mine { color: red; }", user_chrome)
-        self.assertTrue(os.path.exists(os.path.join(chrome, "userChrome.css" + host.BACKUP_SUFFIX)))
+        # The user's own rules are set aside, so they can't override ours.
+        backup = os.path.join(chrome, "userChrome.css" + host.BACKUP_SUFFIX)
+        self.assertEqual(read(os.path.join(chrome, "userChrome.css")), host.IMPORT_BLOCK)
+        self.assertEqual(read(backup), ".mine { color: red; }\n")
+        self.assertFalse(res["installed"]["otherRules"])
         self.assertIn("#x { color: blue", read(os.path.join(chrome, host.CSS_FILENAME)))
         self.assertIn('"sidebar.position_start", false', read(os.path.join(self.a, "user.js")))
 
@@ -149,13 +148,59 @@ class Profiles(unittest.TestCase):
         self.assertFalse(res["installed"]["cssFile"])
         self.assertFalse(res["installed"]["importLine"])
         self.assertFalse(res["installed"]["userJs"])
+        self.assertTrue(res["ownRulesRestored"])
         self.assertEqual(read(os.path.join(chrome, "userChrome.css")), ".mine { color: red; }\n")
+        self.assertFalse(os.path.exists(backup))
         self.assertEqual(read(os.path.join(self.a, "user.js")), 'user_pref("browser.startup.page", 3);\n')
+
+    def test_rules_left_by_an_older_helper_are_set_aside_once(self):
+        # Up to 0.3.2 the helper copied userChrome.css to the backup and kept
+        # the rules in it below the import, where they overrode ours.
+        ctx = {"profiles": host.list_profiles(self.root), "running": {"path": self.a, "pid": 1, "startedAt": 1.0}}
+        chrome = os.path.join(self.a, "chrome")
+        os.makedirs(chrome)
+        old = "#sidebar-container { min-width: 10px !important; }\n"
+        user_chrome = os.path.join(chrome, "userChrome.css")
+        backup = user_chrome + host.BACKUP_SUFFIX
+        with open(user_chrome, "w") as f:
+            f.write(host.IMPORT_BLOCK + old)
+        with open(backup, "w") as f:
+            f.write(old)
+        self.assertTrue(host.handle({"cmd": "status"}, ctx)["installed"]["otherRules"])
+
+        host.handle({"cmd": "apply", "css": "#x{}", "prefs": PREFS}, ctx)
+        self.assertEqual(read(user_chrome), host.IMPORT_BLOCK)
+        self.assertEqual(read(backup), old)
+
+        host.handle({"cmd": "remove"}, ctx)
+        self.assertEqual(read(user_chrome), old)
+        self.assertFalse(os.path.exists(backup))
+
+    def test_rules_added_after_apply_are_kept_too(self):
+        ctx = {"profiles": host.list_profiles(self.root), "running": {"path": self.a, "pid": 1, "startedAt": 1.0}}
+        chrome = os.path.join(self.a, "chrome")
+        os.makedirs(chrome)
+        user_chrome = os.path.join(chrome, "userChrome.css")
+        with open(user_chrome, "w") as f:
+            f.write(".first {}\n")
+        host.handle({"cmd": "apply", "css": "#x{}", "prefs": PREFS}, ctx)
+        with open(user_chrome, "a") as f:
+            f.write(".second {}\n")
+
+        host.handle({"cmd": "apply", "css": "#x{}", "prefs": PREFS}, ctx)
+        self.assertEqual(read(user_chrome), host.IMPORT_BLOCK)
+        self.assertEqual(read(user_chrome + host.BACKUP_SUFFIX), ".first {}\n\n.second {}\n")
+
+        with open(user_chrome, "a") as f:
+            f.write(".third {}\n")
+        self.assertTrue(host.handle({"cmd": "remove"}, ctx)["ownRulesRestored"])
+        self.assertEqual(read(user_chrome), ".first {}\n\n.second {}\n\n.third {}\n")
 
     def test_remove_deletes_files_that_only_held_our_blocks(self):
         ctx = {"profiles": host.list_profiles(self.root), "running": None}
         host.handle({"cmd": "apply", "css": "#x{}", "prefs": PREFS, "profile": self.b}, ctx)
-        host.handle({"cmd": "remove", "profile": self.b}, ctx)
+        res = host.handle({"cmd": "remove", "profile": self.b}, ctx)
+        self.assertFalse(res["ownRulesRestored"])
         self.assertFalse(os.path.exists(os.path.join(self.b, "chrome", "userChrome.css")))
         self.assertFalse(os.path.exists(os.path.join(self.b, "user.js")))
 
@@ -281,6 +326,24 @@ class WindowsProfileLock(unittest.TestCase):
 class Protocol(unittest.TestCase):
     """Runs the script the way Firefox does: length-prefixed JSON over stdio."""
 
+    def status_in(self, home, root):
+        """The helper's status reply, with HOME at home and a profile in root."""
+        os.makedirs(root)
+        make_profile(root, "zzz.default-release")
+        write_ini(root, "zzz.default-release", default="zzz.default-release")
+        payload = json.dumps({"cmd": "status"}).encode()
+        env = dict(os.environ, HOME=home, APPDATA=os.path.join(home, "AppData", "Roaming"))
+        env.pop("XDG_CONFIG_HOME", None)
+        proc = subprocess.run(
+            [sys.executable, HOST_PATH],
+            input=struct.pack("=I", len(payload)) + payload,
+            capture_output=True,
+            env=env,
+            timeout=30,
+        )
+        (length,) = struct.unpack("=I", proc.stdout[:4])
+        return json.loads(proc.stdout[4 : 4 + length])
+
     def test_status_round_trip(self):
         with tempfile.TemporaryDirectory() as home:
             if sys.platform == "darwin":
@@ -289,23 +352,17 @@ class Protocol(unittest.TestCase):
                 root = os.path.join(home, "AppData", "Roaming", "Mozilla", "Firefox")
             else:
                 root = os.path.join(home, ".mozilla", "firefox")
-            os.makedirs(root)
-            make_profile(root, "zzz.default-release")
-            write_ini(root, "zzz.default-release", default="zzz.default-release")
-
-            payload = json.dumps({"cmd": "status"}).encode()
-            proc = subprocess.run(
-                [sys.executable, HOST_PATH],
-                input=struct.pack("=I", len(payload)) + payload,
-                capture_output=True,
-                env=dict(os.environ, HOME=home, APPDATA=os.path.join(home, "AppData", "Roaming")),
-                timeout=30,
-            )
-            (length,) = struct.unpack("=I", proc.stdout[:4])
-            reply = json.loads(proc.stdout[4 : 4 + length])
+            reply = self.status_in(home, root)
             self.assertTrue(reply["ok"], reply)
             self.assertEqual(reply["profile"]["name"], "zzz.default-release")
             self.assertFalse(reply["installed"]["cssFile"])
+
+    @unittest.skipUnless(sys.platform.startswith("linux"), "Linux only")
+    def test_linux_profiles_under_xdg_config(self):
+        with tempfile.TemporaryDirectory() as home:
+            reply = self.status_in(home, os.path.join(home, ".config", "mozilla", "firefox"))
+            self.assertTrue(reply["ok"], reply)
+            self.assertEqual([p["name"] for p in reply["profiles"]], ["zzz.default-release"])
 
     def test_errors_are_reported_not_crashed(self):
         payload = b"not json"

@@ -6,11 +6,13 @@ extension sends its generated stylesheet here and this script installs it into
 the Firefox profile:
 
   <profile>/chrome/autohide-tab-bar.css   owned outright, replaced on apply
-  <profile>/chrome/userChrome.css         gains a one-line managed @import
+  <profile>/chrome/userChrome.css         holds only a managed @import of it
   <profile>/user.js                       gains a managed block of prefs
 
-Anything else in userChrome.css and user.js is left alone. Firefox starts the
-script once per message (runtime.sendNativeMessage); it answers and exits.
+Rules of the user's own in userChrome.css would override the extension's, so
+apply sets them aside in userChrome.css.ahtb-backup and remove puts them back.
+Anything else in user.js is left alone. Firefox starts the script once per
+message (runtime.sendNativeMessage); it answers and exits.
 
 Standard library only; Python 3.8+. macOS, Linux and Windows.
 """
@@ -28,7 +30,7 @@ import sys
 import tempfile
 import time
 
-VERSION = "0.3.2"
+VERSION = "0.3.5"
 
 CSS_FILENAME = "autohide-tab-bar.css"
 BACKUP_SUFFIX = ".ahtb-backup"
@@ -104,6 +106,12 @@ def firefox_root():
     if system == "Darwin":
         return os.path.expanduser("~/Library/Application Support/Firefox")
     if system == "Linux":
+        # Newer Firefox keeps its profiles under XDG_CONFIG_HOME; older
+        # installs, and those upgraded from them, under ~/.mozilla.
+        config = os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config")
+        xdg_root = os.path.join(config, "mozilla", "firefox")
+        if os.path.exists(os.path.join(xdg_root, "profiles.ini")):
+            return xdg_root
         return os.path.expanduser("~/.mozilla/firefox")
     if system == "Windows":
         return os.path.join(os.environ["APPDATA"], "Mozilla", "Firefox")
@@ -322,21 +330,52 @@ def strip_block(text, begin, end):
     return pattern.sub("", text)
 
 
-def with_import(css):
-    """userChrome.css content with our @import block at the top.
+def own_rules(user_chrome):
+    """What userChrome.css holds besides our import block: rules of the user's own."""
+    return strip_block(user_chrome or "", IMPORT_BEGIN, IMPORT_END)
 
-    @import is only valid before every other rule (an @charset may precede
-    it), so the block goes first. Keeping our rules in their own file also
-    keeps them clear of any @namespace the user's own rules declare.
+
+def merge_rules(older, newer):
+    """Two sets of the user's own rules as one, older first, nothing repeated.
+
+    Older helpers kept the user's rules in userChrome.css after taking a
+    backup, so the newer set often already contains the older one.
     """
-    css = strip_block(css, IMPORT_BEGIN, IMPORT_END)
-    charset = re.match(r'\s*@charset\s+"[^"]*"\s*;[ \t]*\n?', css)
-    if charset:
-        head = charset.group(0)
-        if not head.endswith("\n"):
-            head += "\n"
-        return head + IMPORT_BLOCK + css[charset.end():]
-    return IMPORT_BLOCK + css
+    if older is None or older.strip() in newer:
+        return newer
+    if newer.strip() in older:
+        return older
+    return older + ("" if older.endswith("\n") else "\n") + "\n" + newer
+
+
+def set_aside_own_rules(path):
+    """Moves the user's own rules out of userChrome.css into the backup file.
+
+    They load after our stylesheet and win wherever they match it (a
+    hand-written auto-hide sidebar from before, say), which breaks the bars in
+    ways that look like bugs. The backup collects them and remove() puts them
+    back.
+    """
+    rules = own_rules(read_text(path))
+    if rules.strip():
+        backup = path + BACKUP_SUFFIX
+        write_atomic(backup, merge_rules(read_text(backup), rules))
+
+
+def restore_own_rules(path):
+    """Takes our import out of userChrome.css and puts back the rules apply()
+    set aside, followed by any added since. The file goes if nothing is left.
+    Returns whether set-aside rules came back."""
+    backup = path + BACKUP_SUFFIX
+    kept = read_text(backup)
+    rules = merge_rules(kept, own_rules(read_text(path)))
+    if rules.strip():
+        write_atomic(path, rules)
+    elif os.path.exists(path):
+        os.unlink(path)
+    if kept is not None:
+        os.unlink(backup)
+    return bool(kept and kept.strip())
 
 
 def format_pref(name, value):
@@ -434,6 +473,7 @@ def status(msg, ctx):
         "installed": {
             "cssFile": meta is not None,
             "importLine": IMPORT_BEGIN in user_chrome,
+            "otherRules": bool(own_rules(user_chrome).strip()),
             "userJs": USERJS_BEGIN in user_js,
             "hash": meta.get("hash") if meta else None,
             "appliedAt": meta.get("appliedAt") if meta else None,
@@ -472,12 +512,8 @@ def apply(msg, ctx):
     meta = {"hash": content_hash, "appliedAt": time.time(), "version": VERSION, "prefs": prefs}
     write_atomic(paths["css"], META_PREFIX + json.dumps(meta) + " */\n" + css)
 
-    user_chrome = read_text(paths["userChrome"])
-    if user_chrome is not None and IMPORT_BEGIN not in user_chrome:
-        backup = paths["userChrome"] + BACKUP_SUFFIX
-        if not os.path.exists(backup):
-            shutil.copy2(paths["userChrome"], backup)
-    write_atomic(paths["userChrome"], with_import(user_chrome or ""))
+    set_aside_own_rules(paths["userChrome"])
+    write_atomic(paths["userChrome"], IMPORT_BLOCK)
 
     write_atomic(paths["userJs"], with_prefs(user_js, prefs))
     return status({"profile": profile}, ctx)
@@ -534,19 +570,16 @@ def remove(msg, ctx):
 
     if os.path.exists(paths["css"]):
         os.unlink(paths["css"])
-    for key, begin, end in (
-        ("userChrome", IMPORT_BEGIN, IMPORT_END),
-        ("userJs", USERJS_BEGIN, USERJS_END),
-    ):
-        text = read_text(paths[key])
-        if text is None:
-            continue
-        stripped = strip_block(text, begin, end)
+    own_rules_restored = restore_own_rules(paths["userChrome"])
+    user_js = read_text(paths["userJs"])
+    if user_js is not None:
+        stripped = strip_block(user_js, USERJS_BEGIN, USERJS_END)
         if stripped.strip():
-            write_atomic(paths[key], stripped)
+            write_atomic(paths["userJs"], stripped)
         else:
-            os.unlink(paths[key])
+            os.unlink(paths["userJs"])
     result = status({"profile": profile}, ctx)
+    result["ownRulesRestored"] = own_rules_restored
     # Firefox keeps the last value of a pref user.js set; the settings page
     # says how to turn the title bar back off.
     result["titlebarLeftOn"] = titlebar_left_on

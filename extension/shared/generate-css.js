@@ -649,6 +649,21 @@ ${rule(
 
   const hiddenTranslate = bottom ? `0 calc(100% - ${trigger})` : `0 calc(${trigger} - 100%)`;
   const heldTranslate = bottom ? `0 calc(100% - ${trigger} - ${NUDGE})` : `0 calc(${trigger} - 100% + ${NUDGE})`;
+  // A side tab bar runs the window's full height, so the hidden toolbar's
+  // hover zone lies over its first (or last) tabs. While the pointer is on
+  // the tab bar the zone lets it through to them. A toolbar held open by
+  // typing, a menu or a panel takes the pointer back: pointer-events: auto in
+  // the open rule, which comes later with selectors at least as specific. (Its
+  // plain :hover one is less specific, but the toolbar and the tab bar can't
+  // both be under the pointer.)
+  if (L.vertical) {
+    const onTabBar = [":has(#sidebar-container:hover)", ":has(#tabbrowser-tabs[movingtab])", ":has(tab-group[movingtabgroup])"];
+    blocks.push(`/* The hidden toolbar's hover zone doesn't cover a side tab bar in use. */
+${rule(
+  onTabBar.map((c) => `${HGUARD}${c} #navigator-toolbox`),
+  ["pointer-events: none"],
+)}`);
+  }
   blocks.push(`/* Toolbar auto-hide. The toolbox floats over the page and slides out of view,
    leaving only its transparent inner border (the hover zone) inside the
    window. translate percentages are relative to the toolbox's own height, so
@@ -667,7 +682,7 @@ ${rule(TB, [
 
 ${holdRule(HGUARD, "#navigator-toolbox", [`translate: ${heldTranslate}`])}
 
-${rule(open, ["translate: 0 0", "transition-delay: var(--ahtb-open-delay)"])}`);
+${rule(open, ["translate: 0 0", ...(L.vertical ? ["pointer-events: auto"] : []), "transition-delay: var(--ahtb-open-delay)"])}`);
   return blocks;
 }
 

@@ -25,6 +25,10 @@ const bool = (def) => ({ type: "bool", default: def });
 const color = (def) => ({ type: "color", default: def });
 const oneOf = (values, def) => ({ type: "enum", values, default: def });
 
+// Widest hover zone, for the tab bar and the toolbar. The zone sits over the
+// page edge and takes its clicks, so much more than this would be in the way.
+const MAX_HOVER_ZONE = 100;
+
 // Defaults reproduce the original hand-written userChrome.css.
 export const FIELDS = {
   position: oneOf(POSITIONS, "left"),
@@ -44,7 +48,7 @@ export const FIELDS = {
   tabHeightCustom: bool(false),
   tabHeight: int(20, 60, 32),
   // Invisible strip past the visible edge that catches the pointer.
-  triggerSize: int(0, 40, 10),
+  triggerSize: int(0, MAX_HOVER_ZONE, 10),
 
   duration: int(0, 1000, 200),
   easing: oneOf(EASINGS.map((e) => e.id), "ease"),
@@ -75,7 +79,7 @@ export const FIELDS = {
   tabsAboveToolbar: bool(true),
   toolbarAutoHide: bool(false),
   // The hidden toolbar keeps nothing visible but this strip, so it can't be 0.
-  toolbarTriggerSize: int(2, 40, 10),
+  toolbarTriggerSize: int(2, MAX_HOVER_ZONE, 10),
   toolbarBgCustom: bool(false),
   toolbarBgColor: color("#1c1b22"),
   toolbarIconCustom: bool(false),
@@ -105,6 +109,17 @@ export const FIELDS = {
   urlbarSearchTerms: oneOf(TRI, "keep"),
   // 0 = keep Firefox's setting.
   urlbarResults: int(0, 20, 0),
+};
+
+// Firefox's own layout: horizontal tabs along the top, above the toolbar, and
+// neither of them hiding. "Reset tab bar and toolbar" on the settings page
+// puts these over the current settings; looks and sizes stay as they are.
+export const REGULAR_LAYOUT = {
+  position: "top",
+  autoHide: false,
+  toolbarPosition: "top",
+  tabsAboveToolbar: true,
+  toolbarAutoHide: false,
 };
 
 const COLOR_RE = /^#[0-9a-f]{6}$/i;

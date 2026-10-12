@@ -1,7 +1,7 @@
 // The settings page: the form, the live preview, the helper connection
 // (Apply / Remove), the list of what Apply changes, and update checks.
 
-import { EASINGS, FIELDS, defaults, easingCss, firefoxPrefs, isVertical, sanitize } from "../shared/settings.js";
+import { EASINGS, FIELDS, REGULAR_LAYOUT, defaults, easingCss, firefoxPrefs, isVertical, sanitize } from "../shared/settings.js";
 import { generateCss, hexToRgba } from "../shared/generate-css.js";
 import {
   REPO,
@@ -14,6 +14,10 @@ import {
 
 // The native messaging helper's registered name (see native-host/install.sh).
 const HOST = "autohide_tab_bar";
+
+// The oldest helper this version of the extension works with. Raise it when a
+// release changes the helper; releases that don't, don't ask for an update.
+const HELPER_NEEDED = "0.3.5";
 
 // One-line helper installers, shown when the helper is missing or outdated.
 const DOWNLOAD = `https://github.com/${REPO}/releases/latest/download`;
@@ -44,6 +48,7 @@ const helperBox = document.getElementById("helper-box");
 const applyButton = document.getElementById("apply");
 const removeButton = document.getElementById("remove");
 const resetButton = document.getElementById("reset");
+const resetLayoutButton = document.getElementById("reset-layout");
 const saveIndicator = document.getElementById("save-indicator");
 const cssOutput = document.getElementById("css-output");
 const manualPrefs = document.getElementById("manual-prefs");
@@ -467,6 +472,7 @@ function stateMessages() {
         "ok",
         h("p", {}, "Removed. Restart Firefox to get its normal tab bar back."),
         h("p", { class: "sub" }, quitHint()),
+        st.ownRulesRestored && h("p", { class: "sub" }, "The userChrome.css you had before is back in place."),
         st.titlebarLeftOn &&
           h(
             "p",
@@ -494,6 +500,18 @@ function stateMessages() {
     out.push(status("ok", h("p", {}, "Applied and active."), iconsOnlyHint()));
   }
 
+  if (inst.cssFile && inst.otherRules) {
+    // Older helpers left them in place, and anyone can add rules by hand. They
+    // load after the extension's and win, which breaks the bars in odd ways.
+    out.push(
+      status(
+        "warn",
+        h("p", {}, "userChrome.css has other rules in it that can get in the way."),
+        h("p", { class: "sub" }, "Press Apply to set them aside. They're kept as userChrome.css.ahtb-backup, and Remove from Firefox puts them back."),
+      ),
+    );
+  }
+
   if (inst.cssFile && st.profile.isRunning && !st.restartPending && st.stylesheetsPref === false) {
     out.push(
       status(
@@ -504,10 +522,7 @@ function stateMessages() {
     );
   }
 
-  // Helper changes ship in minor versions; a patch release of the extension
-  // alone doesn't need a new helper, so only major.minor is compared.
-  const minor = (version) => version.split(".").slice(0, 2).concat("0").join(".");
-  if (compareVersions(minor(st.version), minor(currentVersion())) < 0) {
+  if (compareVersions(st.version, HELPER_NEEDED) < 0) {
     out.push(
       status(
         "warn",
@@ -654,6 +669,11 @@ applyButton.addEventListener("click", () => runAction("apply"));
 confirmable(removeButton, "Click again to remove", () => runAction("remove"));
 confirmable(resetButton, "Click again to reset everything", () => {
   settings = defaults();
+  writeForm(settings);
+  onSettingsChanged();
+});
+confirmable(resetLayoutButton, "Click again to reset the tab bar and toolbar", () => {
+  settings = sanitize({ ...settings, ...REGULAR_LAYOUT });
   writeForm(settings);
   onSettingsChanged();
 });

@@ -42,10 +42,12 @@ extension's stylesheet there for you, so you never edit files.
 ## What Apply changes
 
 Only when you press **Apply**: your design goes into `userChrome.css` in your
-Firefox profile, and the Firefox settings the layout needs (vertical or
-horizontal tabs, sidebar side, title bar, any address bar options you picked)
-are listed on the settings page and applied once at your next restart. After
-that, Firefox's own settings work as usual.
+Firefox profile. Anything you or another tool put in that file before is set
+aside in `userChrome.css.ahtb-backup` so it can't override the design;
+**Remove from Firefox** puts it back. The Firefox settings the layout needs
+(vertical or horizontal tabs, sidebar side, title bar, any address bar options
+you picked) are listed on the settings page and applied once at your next
+restart. After that, Firefox's own settings work as usual.
 
 ## Privacy
 
@@ -56,6 +58,8 @@ sees your IP address and Firefox version.
 ## Good to know
 
 - Only tab icons, no titles? Click Firefox's sidebar button once.
+- Want Firefox's regular tab bar and toolbar back? **Reset tab bar and
+  toolbar** under Position, then **Apply**.
 
 ## Remove
 

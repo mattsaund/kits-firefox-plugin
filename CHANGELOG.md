@@ -3,6 +3,29 @@
 Each version is a `v` tag, with the extension and helper on its
 [release page](https://github.com/mattsaund/kits-firefox-plugin/releases).
 
+## 0.3.5 — 2026-10-12
+
+- **Old userChrome.css edits no longer get in the way.** Anything else in
+  `userChrome.css`, like a hand-written auto-hide sidebar from before, used
+  to load after Kits and override it. That made the tab bar push the page
+  aside for a moment as it opened, even when set to slide over it. Apply now
+  sets those rules aside in `userChrome.css.ahtb-backup`, and **Remove from
+  Firefox** puts them back. The settings page tells you when there are some
+  to set aside.
+- **The top of a side tab bar is reachable with an auto-hiding toolbar.**
+  The hidden toolbar's hover zone covered the first tabs, so pointing at
+  them opened the toolbar over them and closed the tab bar. While you're on
+  the tab bar, the zone now lets the pointer through. The toolbar still
+  opens from the rest of the edge.
+- **Hover zones up to 100px**, for the tab bar and the toolbar (was 40px).
+- **Reset tab bar and toolbar**, under Position: back to Firefox's regular
+  layout, with tabs along the top above the toolbar and neither hiding.
+  Colors and sizes stay.
+- Linux: the helper finds Firefox profiles in `~/.config/mozilla/firefox`,
+  where newer Firefox keeps them.
+- **Run the install command again** to update the helper; the settings page
+  reminds you. Then press Apply.
+
 ## 0.3.2 — 2026-10-11
 
 - **The update Download button installs the update.** It used to open an
