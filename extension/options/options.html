@@ -1,4 +1,7 @@
 <!doctype html>
+<!-- The settings page. Every form control's name matches a field in
+     shared/settings.js; data-show, data-show-if and data-requires attributes
+     are handled by updateDependents() in options.js. -->
 <html lang="en">
 <head>
   <meta charset="utf-8">
@@ -415,6 +418,15 @@
       <section class="card apply-card" aria-live="polite">
         <h2>Apply to Firefox</h2>
         <div id="helper-box"></div>
+        <div class="changes">
+          <p>Pressing Apply lets Kits Editor for Firefox, through its helper program:</p>
+          <ul>
+            <li>write your design to <code>userChrome.css</code> in this Firefox profile</li>
+            <li id="apply-prefs-intro">change these Firefox settings:</li>
+          </ul>
+          <ul id="apply-prefs" class="pref-list"></ul>
+          <p class="hint">The settings take effect at your next restart and are applied once. After that you can change them in Firefox's own settings as usual. Remove from Firefox takes the stylesheet back out.</p>
+        </div>
         <div class="actions">
           <button id="apply" type="button" class="primary">Apply</button>
           <button id="remove" type="button" class="ghost danger">Remove from Firefox</button>
@@ -437,10 +449,20 @@
         <pre id="css-output" class="code css"></pre>
       </details>
 
+      <section class="card">
+        <h2>Updates</h2>
+        <label class="row">
+          <span class="row-label">Check for new versions<small>Twice a day, asks GitHub for the latest release. GitHub sees your IP address and Firefox version. Nothing else is sent, and everything works the same with this off.</small></span>
+          <input type="checkbox" class="switch" id="update-checks">
+        </label>
+        <div class="actions">
+          <button id="check-updates" type="button" class="ghost">Check now</button>
+        </div>
+      </section>
+
       <button id="reset" type="button" class="link">Reset all settings to defaults</button>
       <p class="version-line">
         Version <span id="version"></span> ·
-        <button id="check-updates" type="button" class="link">Check for updates</button> ·
         <a href="https://github.com/mattsaund/kits-firefox-plugin" target="_blank" rel="noopener">GitHub</a>
       </p>
     </aside>

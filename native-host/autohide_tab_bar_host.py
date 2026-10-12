@@ -65,7 +65,7 @@ TITLEBAR_PREF = "browser.tabs.inTitlebar"
 
 
 class HostError(Exception):
-    pass
+    """A request the helper refuses; reported back to the extension as an error."""
 
 
 # ---------------------------------------------------------------------------
@@ -74,6 +74,7 @@ class HostError(Exception):
 
 
 def read_message(stream):
+    """One message from Firefox: a 4-byte native-endian length, then UTF-8 JSON."""
     raw_len = stream.read(4)
     if len(raw_len) < 4:
         raise HostError("No message received")
@@ -85,6 +86,7 @@ def read_message(stream):
 
 
 def write_message(stream, obj):
+    """One reply to Firefox, framed the same way."""
     data = json.dumps(obj).encode("utf-8")
     stream.write(struct.pack("=I", len(data)))
     stream.write(data)
@@ -97,6 +99,7 @@ def write_message(stream, obj):
 
 
 def firefox_root():
+    """The folder holding profiles.ini on this system."""
     system = platform.system()
     if system == "Darwin":
         return os.path.expanduser("~/Library/Application Support/Firefox")
@@ -142,10 +145,12 @@ def list_profiles(root=None):
 
 
 def is_profile_dir(path):
+    """Whether a folder looks like a Firefox profile (and not, say, the updater's lock folder)."""
     return os.path.isfile(os.path.join(path, "prefs.js")) or os.path.isfile(os.path.join(path, "times.json"))
 
 
 def parent_pid(pid):
+    """The parent of a process, via ps (macOS and Linux)."""
     try:
         out = subprocess.run(
             ["ps", "-o", "ppid=", "-p", str(pid)], capture_output=True, text=True, timeout=5
@@ -156,6 +161,7 @@ def parent_pid(pid):
 
 
 def open_files(pid):
+    """Paths a process has open: /proc on Linux, lsof on macOS."""
     if os.path.isdir("/proc/{}/fd".format(pid)):
         paths = []
         for fd in glob.glob("/proc/{}/fd/*".format(pid)):
@@ -175,6 +181,7 @@ def open_files(pid):
 
 
 def process_start_time(pid):
+    """When a process started, as a Unix timestamp (macOS and Linux)."""
     try:
         out = subprocess.run(
             ["ps", "-o", "lstart=", "-p", str(pid)],
@@ -282,6 +289,7 @@ def target_profile(msg, ctx):
 
 
 def read_text(path):
+    """A file's text, or None if it doesn't exist."""
     try:
         with open(path, "r", encoding="utf-8") as f:
             return f.read()
@@ -290,6 +298,7 @@ def read_text(path):
 
 
 def write_atomic(path, text):
+    """Writes a file via a temporary file and a rename, so it is never half-written."""
     directory = os.path.dirname(path)
     os.makedirs(directory, exist_ok=True)
     fd, tmp = tempfile.mkstemp(prefix=".ahtb-", dir=directory)
@@ -308,6 +317,7 @@ def write_atomic(path, text):
 
 
 def strip_block(text, begin, end):
+    """Text with a managed block (begin marker through end marker) removed."""
     pattern = re.compile(r"[ \t]*" + re.escape(begin) + r".*?" + re.escape(end) + r"[ \t]*\n?", re.S)
     return pattern.sub("", text)
 
@@ -330,10 +340,12 @@ def with_import(css):
 
 
 def format_pref(name, value):
+    """One user.js line; JSON quoting is valid for user.js values."""
     return "user_pref({}, {});".format(json.dumps(name), json.dumps(value))
 
 
 def validate_prefs(prefs):
+    """The prefs, if every one is on the allowlist with an allowed value."""
     if not isinstance(prefs, dict):
         raise HostError("prefs must be an object")
     for name, value in prefs.items():
@@ -346,6 +358,7 @@ def validate_prefs(prefs):
 
 
 def with_prefs(userjs, prefs):
+    """user.js content with our managed block replaced by these prefs."""
     userjs = strip_block(userjs, USERJS_BEGIN, USERJS_END)
     if userjs and not userjs.endswith("\n"):
         userjs += "\n"
@@ -355,6 +368,7 @@ def with_prefs(userjs, prefs):
 
 
 def read_meta(css_text):
+    """The JSON on our stylesheet's first line (hash, apply time, prefs), or None."""
     if not css_text:
         return None
     first = css_text.split("\n", 1)[0]
@@ -368,12 +382,14 @@ def read_meta(css_text):
 
 
 def stylesheets_pref(profile):
+    """Whether userChrome.css loading is on, as last saved to prefs.js (None if unset)."""
     prefs = read_text(os.path.join(profile, "prefs.js")) or ""
     m = re.search(r'user_pref\("toolkit\.legacyUserProfileCustomizations\.stylesheets",\s*(true|false)\);', prefs)
     return None if not m else m.group(1) == "true"
 
 
 def profile_paths(profile):
+    """The three files the helper manages in a profile."""
     chrome = os.path.join(profile, "chrome")
     return {
         "css": os.path.join(chrome, CSS_FILENAME),
@@ -388,6 +404,7 @@ def profile_paths(profile):
 
 
 def status(msg, ctx):
+    """What is installed in a profile, which Firefox is running, and whether a restart is due."""
     profile, chosen_by = choose_profile(msg.get("profile"), ctx["profiles"], ctx["running"])
     paths = profile_paths(profile)
     user_chrome = read_text(paths["userChrome"]) or ""
@@ -427,11 +444,16 @@ def status(msg, ctx):
 
 
 def apply(msg, ctx):
+    """Installs a stylesheet and prefs into a profile (the settings page's Apply)."""
     css = msg.get("css")
     if not isinstance(css, str) or not css.strip():
         raise HostError("css must be a non-empty string")
     if len(css.encode("utf-8")) > MAX_CSS_BYTES or "\0" in css:
         raise HostError("css rejected")
+    if re.search(r"url\s*\(|@import", css, re.I):
+        # The generator never produces either. Refusing them means the browser
+        # UI stylesheet can't be made to load anything from anywhere.
+        raise HostError("css must not load other files")
     prefs = validate_prefs(msg.get("prefs", {}))
     content_hash = msg.get("hash")
     if content_hash is not None and not (isinstance(content_hash, str) and re.fullmatch(r"[0-9a-f]{8,128}", content_hash)):
@@ -439,8 +461,15 @@ def apply(msg, ctx):
 
     profile = target_profile(msg, ctx)
     paths = profile_paths(profile)
+    previous = read_meta(read_text(paths["css"]))
+    user_js = read_text(paths["userJs"]) or ""
 
-    meta = {"hash": content_hash, "appliedAt": time.time(), "version": VERSION}
+    if forced_native_titlebar(previous, user_js) and TITLEBAR_PREF not in prefs:
+        # We switched Firefox's own title bar on for a bottom toolbar; it's no
+        # longer needed, so hand the choice back to Firefox's default.
+        prefs = dict(prefs, **{TITLEBAR_PREF: -1})
+
+    meta = {"hash": content_hash, "appliedAt": time.time(), "version": VERSION, "prefs": prefs}
     write_atomic(paths["css"], META_PREFIX + json.dumps(meta) + " */\n" + css)
 
     user_chrome = read_text(paths["userChrome"])
@@ -450,25 +479,58 @@ def apply(msg, ctx):
             shutil.copy2(paths["userChrome"], backup)
     write_atomic(paths["userChrome"], with_import(user_chrome or ""))
 
-    user_js = read_text(paths["userJs"]) or ""
-    if forced_native_titlebar(user_js) and TITLEBAR_PREF not in prefs:
-        # We switched Firefox's own title bar on for a bottom toolbar; it's no
-        # longer needed, so hand the choice back to Firefox's default.
-        prefs = dict(prefs, **{TITLEBAR_PREF: -1})
     write_atomic(paths["userJs"], with_prefs(user_js, prefs))
     return status({"profile": profile}, ctx)
 
 
-def forced_native_titlebar(user_js):
-    """Whether our managed user.js block turned Firefox's title bar on."""
+def forced_native_titlebar(meta, user_js):
+    """Whether the last Apply turned Firefox's title bar on.
+
+    Recorded in the stylesheet's meta line, since the user.js block that set
+    it is dropped once Firefox has taken it in (see settle). Older versions
+    only left it in the user.js block.
+    """
+    if meta and isinstance(meta.get("prefs"), dict):
+        return meta["prefs"].get(TITLEBAR_PREF) == 0
     block = re.search(re.escape(USERJS_BEGIN) + r"(.*?)" + re.escape(USERJS_END), user_js, re.S)
     return bool(block and format_pref(TITLEBAR_PREF, 0) in block.group(1))
 
 
+def settle(msg, ctx):
+    """Stop re-applying the last Apply's prefs once Firefox has them.
+
+    user.js is read at every start, so prefs left in it would undo any change
+    made in Firefox's own settings. Once a Firefox that started after the
+    Apply has written prefs.js, the values are saved there and the block can
+    go: the prefs then apply once, and Firefox's settings work normally after.
+    Only ever touches the profile of the Firefox that started the helper.
+    """
+    running = ctx["running"]
+    if not running or not running.get("startedAt"):
+        return {"ok": True, "settled": False}
+    paths = profile_paths(running["path"])
+    meta = read_meta(read_text(paths["css"]))
+    user_js = read_text(paths["userJs"])
+    prefs_js = os.path.join(running["path"], "prefs.js")
+    if not meta or not user_js or USERJS_BEGIN not in user_js or not os.path.exists(prefs_js):
+        return {"ok": True, "settled": False}
+    loaded = running["startedAt"] > meta.get("appliedAt", float("inf"))
+    saved = os.path.getmtime(prefs_js) > running["startedAt"]
+    if not (loaded and saved):
+        return {"ok": True, "settled": False}
+    stripped = strip_block(user_js, USERJS_BEGIN, USERJS_END)
+    if stripped.strip():
+        write_atomic(paths["userJs"], stripped)
+    else:
+        os.unlink(paths["userJs"])
+    return {"ok": True, "settled": True}
+
+
 def remove(msg, ctx):
+    """Takes everything apply() wrote back out of a profile."""
     profile = target_profile(msg, ctx)
     paths = profile_paths(profile)
-    titlebar_left_on = forced_native_titlebar(read_text(paths["userJs"]) or "")
+    titlebar_left_on = forced_native_titlebar(read_meta(read_text(paths["css"])), read_text(paths["userJs"]) or "")
 
     if os.path.exists(paths["css"]):
         os.unlink(paths["css"])
@@ -491,10 +553,12 @@ def remove(msg, ctx):
     return result
 
 
-COMMANDS = {"status": status, "apply": apply, "remove": remove}
+# The messages the extension can send.
+COMMANDS = {"status": status, "apply": apply, "remove": remove, "settle": settle}
 
 
 def handle(msg, ctx=None):
+    """Runs one command. ctx (profiles and the running Firefox) is injectable for tests."""
     if ctx is None:
         profiles = list_profiles()
         ctx = {"profiles": profiles, "running": running_firefox(profiles)}
@@ -504,6 +568,7 @@ def handle(msg, ctx=None):
 
 
 def main():
+    """Reads one message, answers it, exits; errors become {"ok": false, "error": ...}."""
     stdin, stdout = sys.stdin.buffer, sys.stdout.buffer
     try:
         response = handle(read_message(stdin))

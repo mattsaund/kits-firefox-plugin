@@ -1,3 +1,7 @@
+// Tests for the CSS generator and the settings model: every layout produces
+// well-formed CSS the helper will accept, and each feature emits what Firefox needs.
+// Run: npm test
+
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
@@ -93,6 +97,8 @@ test("every variant is well-formed", () => {
     const css = generateCss(s);
     const label = `${s.position} autoHide=${s.autoHide} overlay=${s.overlay}`;
     assert.doesNotMatch(css, /undefined|NaN|null|\[object/, label);
+    // The helper refuses stylesheets that could load other files.
+    assert.doesNotMatch(css, /url\s*\(|@import/i, label);
 
     const bare = stripComments(css);
     let depth = 0;

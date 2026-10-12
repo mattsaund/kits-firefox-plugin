@@ -1,24 +1,28 @@
 // Turns settings into the userChrome stylesheet the helper installs.
 //
-// The mechanics generalize the original hand-written userChrome.css: the bar
+// The mechanics generalize the original hand-written userChrome.css: a bar
 // always reserves exactly --ahtb-collapsed of layout space, a transparent
 // border of --ahtb-trigger reaches past its visible edge to catch the pointer,
 // and a negative margin hands that border (and, in overlay mode, the extra
 // size gained when opening) back to the page, so the page never reflows.
 //
-//   left/right: Firefox's vertical tabs, #sidebar-container
-//   top/bottom: Firefox's horizontal tabs, #TabsToolbar
+//   left/right tabs: Firefox's vertical tabs, #sidebar-container
+//   top/bottom tabs: Firefox's horizontal tabs, #TabsToolbar
+//   toolbar:         #navigator-toolbox (nav bar, bookmarks, horizontal tabs)
 //
 // Every declaration is !important: userChrome.css is a user sheet, and normal
 // user declarations lose to Firefox's own (author-level) browser CSS.
+//
+// Settings go through sanitize() first, so values can be interpolated as-is.
 
 import { easingCss, isVertical, sanitize } from "./settings.js";
 
-export const PRODUCT_NAME = "Kits Editor for Firefox";
+const PRODUCT_NAME = "Kits Editor for Firefox";
 
-// Context menus that can be opened from inside the bar. Firefox drops :hover
-// while one is open, so these keep the bar expanded instead. The content area
-// menu is deliberately absent: right-clicking the page should let it close.
+// Context menus that can be opened from inside a bar. Firefox drops :hover
+// while one is open, so an active item in these keeps the bar expanded. The
+// page's own context menu is deliberately absent: right-clicking the page
+// should let the bars close.
 const TAB_MENUS = ["#tabContextMenu", "#open-tab-group-context-menu", "#saved-tab-group-context-menu"];
 const SIDEBAR_MENUS = [
   "#sidebar-context-menu",
@@ -28,13 +32,17 @@ const SIDEBAR_MENUS = [
   "#sidebar-synced-tabs-context-menu",
 ];
 
-// Horizontal rules stand down in fullscreen (Firefox auto-hides the toolbox
-// itself there) and in Customize mode (the tab strip must stay editable).
+// Horizontal and toolbar rules stand down in fullscreen (Firefox auto-hides
+// the toolbox itself there) and in Customize mode (everything must stay
+// editable there).
 const HGUARD = ":root:not([inFullscreen], [customizing])";
 
-// Room for the window controls when the top bar slides over the nav bar: the
-// macOS traffic lights at the start, Windows' minimize/maximize/close (three
-// 46px caption buttons) at the end.
+// The toolbar's rows other than the tab strip.
+const TOOLBAR_ROWS = ":is(#nav-bar, #PersonalToolbar, #toolbar-menubar)";
+
+// Room for the window controls when the top tab strip slides over the nav
+// bar: the macOS traffic lights at the start, Windows' minimize, maximize and
+// close (three 46px caption buttons) at the end.
 const MAC_WINDOW_CONTROLS = "76px";
 const WINDOWS_WINDOW_CONTROLS = "138px";
 
@@ -42,6 +50,18 @@ const SHADOW_ON = "drop-shadow(0 0 12px rgba(0, 0, 0, 0.45))";
 const SHADOW_OFF = "drop-shadow(0 0 0 rgba(0, 0, 0, 0))";
 const SHADOW_HELD = "drop-shadow(0 0 0.01px rgba(0, 0, 0, 0))";
 
+// The theme's toolbox color can be translucent (it is on macOS), which would
+// let the page show through anything overlaid on it. Layer it over an opaque
+// base, the same way Firefox's own expand-on-hover sidebar does.
+const OPAQUE_THEME_BACKGROUND = [
+  "background-color: light-dark(#e8e8e8, #202020)",
+  "background-image: image(var(--toolbox-background-color))",
+];
+
+// How far the held state sits from the closed one (see holdRule).
+const NUDGE = "0.01px";
+
+/** The full stylesheet for a settings object. */
 export function generateCss(input) {
   const s = sanitize(input);
   const blocks = [header(s), variables(s)];
@@ -53,6 +73,11 @@ export function generateCss(input) {
   return blocks.join("\n\n") + "\n";
 }
 
+// ---------------------------------------------------------------------------
+// Building blocks
+// ---------------------------------------------------------------------------
+
+/** A comment saying what this file is and where to change it. */
 function header(s) {
   const mode = !s.autoHide ? "always open" : s.overlay ? "auto-hide, overlay" : "auto-hide, push";
   const toolbar = `toolbar on the ${s.toolbarPosition}${s.toolbarAutoHide ? ", auto-hide" : ""}`;
@@ -61,6 +86,7 @@ function header(s) {
    than editing this file; it is replaced every time you apply. */`;
 }
 
+/** The numbers every other rule refers to, as custom properties on :root. */
 function variables(s) {
   const expanded = isVertical(s.position)
     ? `${s.expandedWidth}px`
@@ -79,13 +105,37 @@ function variables(s) {
 }`;
 }
 
+/** One CSS rule; every declaration gets !important (see the file comment). */
+function rule(selectors, declarations) {
+  const sel = Array.isArray(selectors) ? selectors.join(",\n") : selectors;
+  const body = declarations.map((d) => `  ${d} !important;`).join("\n");
+  return `${sel} {\n${body}\n}`;
+}
+
+/** Transition declarations for the closed state of a bar. */
+function transition(properties) {
+  return [
+    `transition-property: ${properties.join(", ")}`,
+    "transition-duration: var(--ahtb-duration)",
+    "transition-timing-function: var(--ahtb-easing)",
+    // Closing waits out the grace period; the expanded rules swap in the open delay.
+    "transition-delay: var(--ahtb-close-delay)",
+  ];
+}
+
+/** Fixes a horizontal tab strip at the given height. */
+function fixedHeight(selector, height) {
+  return rule(selector, [`min-height: ${height}`, `max-height: ${height}`]);
+}
+
 /**
  * "Hold" rules: while the pointer is somewhere Firefox can't see it, the bars
  * keep whatever state they are in instead of closing.
  *
  *   - Outside the window. On macOS the outermost pixels of a window (and the
  *     menu bar above a maximized one) belong to the system, so pushing the
- *     pointer against the screen edge counts as leaving the window.
+ *     pointer against the screen edge counts as leaving the window. So does
+ *     hovering the window buttons, and a native right-click menu.
  *   - Over a menu or panel: a right-click menu on a tab or the toolbar, the
  *     tab group editor, a bookmark folder.
  *   - While a Firefox dialog is open, such as Edit Bookmark.
@@ -111,26 +161,8 @@ function holdRule(root, targets, declarations) {
   return rule(selectors, [...declarations, "transition-delay: 86400s"]);
 }
 
-const NUDGE = "0.01px";
-
-function rule(selectors, declarations) {
-  const sel = Array.isArray(selectors) ? selectors.join(",\n") : selectors;
-  const body = declarations.map((d) => `  ${d} !important;`).join("\n");
-  return `${sel} {\n${body}\n}`;
-}
-
-function transition(properties) {
-  return [
-    `transition-property: ${properties.join(", ")}`,
-    "transition-duration: var(--ahtb-duration)",
-    "transition-timing-function: var(--ahtb-easing)",
-    // Closing waits out the grace period; the expanded rules swap in the open delay.
-    "transition-delay: var(--ahtb-close-delay)",
-  ];
-}
-
 /**
- * Selectors under which the bar should be open. `root` prefixes the
+ * Selectors under which a tab bar should be open. `root` prefixes the
  * conditions that live outside the bar (open panels and menus).
  */
 function expandedSelectors({ root = ":root", target, menus, extraSelf = [] }) {
@@ -149,8 +181,7 @@ function expandedSelectors({ root = ":root", target, menus, extraSelf = [] }) {
     ":has(#tab-group-editor panel[panelopen])",
     // <menupopup> exposes no open state, but Gecko puts [_moz-menuactive] on
     // the highlighted item of an open menu; submenus are nested in the DOM so
-    // they are covered too. The close delay bridges the moments when the
-    // pointer sits on a separator or the menu has only just opened.
+    // they are covered too. The hold rules cover the moments in between.
     `:has(:is(${menuList}) :is(menu, menuitem)[_moz-menuactive])`,
     `:has(:is(${menuList}):hover)`,
   ];
@@ -158,6 +189,7 @@ function expandedSelectors({ root = ":root", target, menus, extraSelf = [] }) {
   return [...self.map((c) => `${lead}${target}${c}`), ...outside.map((c) => `${root}${c} ${target}`)];
 }
 
+/** An edge line drawn inside a bar, on the side facing the page. */
 function edgeShadow(side, s) {
   const w = `${s.edgeWidth}px`;
   const offsets = {
@@ -169,10 +201,40 @@ function edgeShadow(side, s) {
   return `box-shadow: inset ${offsets[side]} 0 0 ${s.edgeColor}`;
 }
 
+/** Indents a block of CSS, for rules inside an @media block. */
+function indent(text) {
+  return text
+    .split("\n")
+    .map((line) => (line ? `  ${line}` : line))
+    .join("\n");
+}
+
+/**
+ * Where things sit. The toolbox (toolbar rows, plus horizontal tabs) is on
+ * the toolbar's edge. Horizontal tabs on the same edge stay inside it, ordered
+ * above or below the toolbar; on the other edge they leave it as a fixed strip.
+ */
+function layout(s) {
+  const vertical = isVertical(s.position);
+  const tabsInToolbox = !vertical && s.position === s.toolbarPosition;
+  const tabsFixed = !vertical && !tabsInToolbox;
+  return {
+    vertical,
+    toolbarEdge: s.toolbarPosition,
+    tabsInToolbox,
+    tabsFixed,
+    // A transformed toolbox would capture the fixed tab strip inside it
+    // (dragging it along, and Firefox stops painting it), so in that case the
+    // toolbar rows are wiped with clip-path instead of sliding.
+    toolbarWipe: s.toolbarAutoHide && tabsFixed,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Left / right: vertical tabs in #sidebar-container
 // ---------------------------------------------------------------------------
 
+/** The sidebar tab bar: fixed width, or collapsing with a hover strip. */
 function verticalRules(s) {
   const T = "#sidebar-container";
   // Firefox puts [sidebar-positionend] on the container when the sidebar is on
@@ -261,34 +323,14 @@ ${rule(open.flat(), [
 // Top / bottom: horizontal tabs in #TabsToolbar
 // ---------------------------------------------------------------------------
 
-/**
- * Where things sit. The toolbox (toolbar rows, plus horizontal tabs) is on
- * the toolbar's edge. Horizontal tabs on the same edge stay inside it, ordered
- * above or below the toolbar; on the other edge they leave it as a fixed strip.
- */
-function layout(s) {
-  const vertical = isVertical(s.position);
-  const toolbarEdge = s.toolbarPosition;
-  const tabsInToolbox = !vertical && s.position === toolbarEdge;
-  const tabsFixed = !vertical && !tabsInToolbox;
-  return {
-    vertical,
-    toolbarEdge,
-    tabsInToolbox,
-    tabsFixed,
-    // A transformed toolbox would capture the fixed tab strip inside it
-    // (dragging it along, and Firefox stops painting it), so in that case the
-    // toolbar rows are wiped with clip-path instead of sliding.
-    toolbarWipe: s.toolbarAutoHide && tabsFixed,
-  };
-}
-
+/** The horizontal tab strip: in the toolbox or fixed to the other edge. */
 function horizontalRules(s) {
   const L = layout(s);
   const T = `${HGUARD} #TabsToolbar`;
   const top = s.position === "top";
   // The side of the strip that faces the page; it grows and catches the pointer there.
   const inner = top ? "bottom" : "top";
+  const customHeight = !s.expandedHeightAuto ? [fixedHeight(T, "var(--ahtb-expanded)")] : [];
   const blocks = [];
 
   if (s.tabHeightCustom) {
@@ -304,13 +346,11 @@ ${rule(":root", [`--tab-min-height: ${s.tabHeight}px`])}`);
 ${rule(T, ["order: 10"])}`);
   }
 
-  if (L.tabsInToolbox && s.toolbarAutoHide) {
-    // The tabs hide along with the toolbox (see toolbarRules); the strip itself
-    // only keeps a custom height.
-    if (!s.expandedHeightAuto) {
-      blocks.push(rule(T, ["min-height: var(--ahtb-expanded)", "max-height: var(--ahtb-expanded)"]));
-    }
-    return blocks;
+  // Tabs hiding along with the whole toolbox (see toolbarRules), or never
+  // hiding inside it: the strip itself only keeps a custom height.
+  if (L.tabsInToolbox && (s.toolbarAutoHide || !s.autoHide)) {
+    if (!s.toolbarAutoHide && L.toolbarEdge === "top" && !s.tabsAboveToolbar) blocks.push(windowControlsToNavBar());
+    return [...blocks, ...customHeight];
   }
 
   // With horizontal tabs the window controls (and the window drag area) live
@@ -318,31 +358,17 @@ ${rule(T, ["order: 10"])}`);
   // nav bar, they move to the nav bar, where Firefox puts them for vertical
   // tabs. (A bottom toolbar uses Firefox's own title bar instead; see
   // firefoxPrefs.)
-  if (L.toolbarEdge === "top" && (s.autoHide || L.tabsFixed || !s.tabsAboveToolbar)) {
-    blocks.push(`/* Window controls and dragging move to the nav bar, as with vertical tabs. */
-${rule(`${HGUARD}[customtitlebar] #nav-bar > .titlebar-buttonbox-container`, ["display: flex"])}
+  if (L.toolbarEdge === "top") blocks.push(windowControlsToNavBar());
 
-${rule(`${T} > :is(.titlebar-buttonbox-container, .titlebar-spacer)`, ["display: none"])}
-
-${rule(`${HGUARD}[customtitlebar] #nav-bar`, ["-moz-window-dragging: drag"])}`);
-  }
-
-  if (s.autoHide || L.tabsFixed) {
-    // The toolbox is its own stacking context below the page (z-index 0 vs 2),
-    // which would trap the strip underneath the content it is meant to cover.
-    blocks.push(rule(`${HGUARD} #navigator-toolbox`, ["z-index: 3"]));
-  }
+  // The toolbox is its own stacking context below the page (z-index 0 vs 2),
+  // which would trap the strip underneath the content it is meant to cover.
+  blocks.push(rule(`${HGUARD} #navigator-toolbox`, ["z-index: 3"]));
 
   const fixedAt = top ? "inset: 0 0 auto 0" : "inset: auto 0 0 0";
   const pageMargin = top ? "margin-top" : "margin-bottom";
 
   if (!s.autoHide) {
-    if (L.tabsInToolbox) {
-      if (!s.expandedHeightAuto) {
-        blocks.push(rule(T, ["min-height: var(--ahtb-expanded)", "max-height: var(--ahtb-expanded)"]));
-      }
-      return blocks;
-    }
+    // Fixed to the other edge, always open; the page makes room for it.
     blocks.push(
       rule(T, [
         "position: fixed",
@@ -375,11 +401,7 @@ ${rule(`${HGUARD}[customtitlebar] #nav-bar`, ["-moz-window-dragging: drag"])}`);
     "overflow: hidden",
     "z-index: 10",
     ...(s.shadow ? [`filter: ${SHADOW_OFF}`] : []),
-    `transition-property: ${props.join(", ")}`,
-    "transition-duration: var(--ahtb-duration)",
-    "transition-timing-function: var(--ahtb-easing)",
-    "--ahtb-tab-delay: var(--ahtb-close-delay)",
-    "transition-delay: var(--ahtb-tab-delay)",
+    ...transition(props),
   ];
 
   if (L.tabsInToolbox) {
@@ -429,7 +451,7 @@ ${rule(open, [
   "min-height: calc(var(--ahtb-expanded) + var(--ahtb-trigger))",
   "max-height: calc(var(--ahtb-expanded) + var(--ahtb-trigger))",
   ...(s.shadow ? [`filter: ${SHADOW_ON}`] : []),
-  "--ahtb-tab-delay: var(--ahtb-open-delay)",
+  "transition-delay: var(--ahtb-open-delay)",
 ])}`);
 
   if (L.tabsInToolbox && s.overlay) {
@@ -456,16 +478,28 @@ ${rule(open, [
   return blocks;
 }
 
+/** Shows the window controls in the nav bar instead of the tab strip. */
+function windowControlsToNavBar() {
+  return `/* Window controls and dragging move to the nav bar, as with vertical tabs. */
+${rule(`${HGUARD}[customtitlebar] #nav-bar > .titlebar-buttonbox-container`, ["display: flex"])}
+
+${rule(`${HGUARD} #TabsToolbar > :is(.titlebar-buttonbox-container, .titlebar-spacer)`, ["display: none"])}
+
+${rule(`${HGUARD}[customtitlebar] #nav-bar`, ["-moz-window-dragging: drag"])}`;
+}
+
 // ---------------------------------------------------------------------------
-// Colors, edge line, corner radius
+// Tab bar colors, edge line, corner radius
 // ---------------------------------------------------------------------------
 
-function hexToRgba(hex, opacityPercent) {
+/** "#rrggbb" at an opacity percentage; the hex itself when fully opaque. */
+export function hexToRgba(hex, opacityPercent) {
   const n = parseInt(hex.slice(1), 16);
   const [r, g, b] = [(n >> 16) & 255, (n >> 8) & 255, n & 255];
   return opacityPercent >= 100 ? hex : `rgba(${r}, ${g}, ${b}, ${opacityPercent / 100})`;
 }
 
+/** The tab bar's colors and shape. Theme choices emit nothing. */
 function appearanceRules(s) {
   const vertical = isVertical(s.position);
   const target = vertical ? "#sidebar-container" : "#TabsToolbar";
@@ -475,13 +509,7 @@ function appearanceRules(s) {
   if (s.backgroundCustom) {
     decls.push(`background-color: ${hexToRgba(s.backgroundColor, s.backgroundOpacity)}`, "background-image: none");
   } else if (s.autoHide && s.overlay) {
-    // The theme's toolbox color can be translucent (it is on macOS), which
-    // would let the page show through an overlaid bar. Layer it over an opaque
-    // base, the same way Firefox's own expand-on-hover sidebar does.
-    decls.push(
-      "background-color: light-dark(#e8e8e8, #202020)",
-      "background-image: image(var(--toolbox-background-color))",
-    );
+    decls.push(...OPAQUE_THEME_BACKGROUND);
   }
   if (s.textCustom) {
     decls.push(
@@ -517,6 +545,7 @@ function appearanceRules(s) {
   return blocks;
 }
 
+/** No animation for anything that slides, when the system asks for less motion. */
 function reducedMotionRule(s) {
   const L = layout(s);
   const targets = [];
@@ -526,9 +555,7 @@ function reducedMotionRule(s) {
     if (L.tabsFixed && !s.overlay) targets.push(`${HGUARD} #browser`);
   }
   if (s.toolbarAutoHide) {
-    targets.push(
-      L.toolbarWipe ? `${HGUARD} #navigator-toolbox > :is(#nav-bar, #PersonalToolbar, #toolbar-menubar)` : `${HGUARD} #navigator-toolbox`,
-    );
+    targets.push(L.toolbarWipe ? `${HGUARD} #navigator-toolbox > ${TOOLBAR_ROWS}` : `${HGUARD} #navigator-toolbox`);
   }
   return `@media (prefers-reduced-motion: reduce) {
 ${indent(rule(targets, ["transition-duration: 0s"]))}
@@ -539,6 +566,7 @@ ${indent(rule(targets, ["transition-duration: 0s"]))}
 // Toolbar: its edge, and auto-hide (nav bar, bookmarks, tabs on the same edge)
 // ---------------------------------------------------------------------------
 
+/** The toolbar's edge, and its auto-hide when switched on. */
 function toolbarRules(s) {
   const L = layout(s);
   const bottom = L.toolbarEdge === "bottom";
@@ -548,14 +576,13 @@ function toolbarRules(s) {
   if (bottom) {
     blocks.push(`/* Toolbar at the bottom: the toolbox follows the page in the window's column. */
 ${rule(TB, ["order: 1"])}`);
-    blocks.push(...upwardUrlbarView());
+    blocks.push(upwardUrlbarView());
   }
 
   if (!s.toolbarAutoHide) return blocks;
 
   const trigger = "var(--ahtb-toolbar-trigger)";
-  const rows = ["#nav-bar", "#PersonalToolbar", "#toolbar-menubar", ...(L.tabsInToolbox ? ["#TabsToolbar"] : [])];
-  const inRows = `:is(${rows.join(", ")})`;
+  const rows = L.tabsInToolbox ? ":is(#nav-bar, #PersonalToolbar, #toolbar-menubar, #TabsToolbar)" : TOOLBAR_ROWS;
   const menuList = [...(L.tabsInToolbox ? TAB_MENUS : []), "#toolbar-context-menu"].join(", ");
 
   const self = [
@@ -563,9 +590,9 @@ ${rule(TB, ["order: 1"])}`);
     // hovering it must not count as hovering the toolbar.
     L.tabsFixed ? ":hover:not(:has(#TabsToolbar:hover))" : ":hover",
     // Typing in the address bar, or keyboard focus anywhere in the toolbar.
-    `:has(${inRows}:focus-within)`,
+    `:has(${rows}:focus-within)`,
     // Address bar results, toolbar button panels and menus mark themselves [open].
-    `:has(${inRows} [open]:not([open="false"]))`,
+    `:has(${rows} [open]:not([open="false"]))`,
     // Windows and Linux: the menu bar Alt brings up (an auto-hiding one drops [inactive]).
     ':has(#toolbar-menubar[autohide="true"]:not([inactive]))',
     ...(L.tabsInToolbox ? [":has(#tabbrowser-tabs[movingtab])", ":has(tab-group[movingtabgroup])"] : []),
@@ -579,11 +606,11 @@ ${rule(TB, ["order: 1"])}`);
 
   const background = s.toolbarBgCustom
     ? [`background-color: ${s.toolbarBgColor}`, "background-image: none"]
-    : ["background-color: light-dark(#e8e8e8, #202020)", "background-image: image(var(--toolbox-background-color))"];
+    : OPAQUE_THEME_BACKGROUND;
   const atEdge = bottom ? "inset: auto 0 0 0" : "inset: 0 0 auto 0";
 
   if (L.toolbarWipe) {
-    const ROWS = "#navigator-toolbox > :is(#nav-bar, #PersonalToolbar, #toolbar-menubar)";
+    const ROWS = `#navigator-toolbox > ${TOOLBAR_ROWS}`;
     const hidden = bottom ? "inset(100% 0 0 0)" : "inset(0 0 100% 0)";
     const held = bottom ? `inset(calc(100% - ${NUDGE}) 0 0 0)` : `inset(0 0 calc(100% - ${NUDGE}) 0)`;
     blocks.push(`/* Toolbar auto-hide, with the tab strip on the other edge. The toolbox
@@ -607,7 +634,7 @@ ${rule(`${HGUARD} ${ROWS}`, [...background, `clip-path: ${hidden}`, "pointer-eve
 ${holdRule(HGUARD, ROWS, [`clip-path: ${held}`, "pointer-events: auto"])}
 
 ${rule(
-  open.map((sel) => `${sel} > :is(#nav-bar, #PersonalToolbar, #toolbar-menubar)`),
+  open.map((sel) => `${sel} > ${TOOLBAR_ROWS}`),
   ["clip-path: inset(0 0 0 0)", "pointer-events: auto", "transition-delay: var(--ahtb-open-delay)"],
 )}
 
@@ -652,8 +679,7 @@ ${rule(open, ["translate: 0 0", "transition-delay: var(--ahtb-open-delay)"])}`);
 function upwardUrlbarView() {
   const shadow = "var(--urlbar-joint-background-shadow-margin)";
   const overlap = "var(--urlbar-joint-background-overlap)";
-  return [
-    `/* Address bar results open upward. */
+  return `/* Address bar results open upward. */
 ${rule(`${HGUARD} #urlbar > .urlbarView:popover-open`, ["position-area: block-start center"])}
 
 ${rule(`${HGUARD} #urlbar[popover-open] > .urlbar-background`, [
@@ -672,14 +698,14 @@ ${rule(`${HGUARD} #urlbar > .urlbarView > .urlbarView-background`, [
   "border-end-start-radius: 0",
   "border-end-end-radius: 0",
   `clip-path: inset(calc(-1 * ${shadow}) calc(-1 * ${shadow}) ${overlap})`,
-])}`,
-  ];
+])}`;
 }
 
 // ---------------------------------------------------------------------------
 // Toolbar and address bar look
 // ---------------------------------------------------------------------------
 
+/** Toolbar colors and the address bar's look. Theme choices emit nothing. */
 function urlbarRules(s) {
   const blocks = [];
 
@@ -725,11 +751,4 @@ function urlbarRules(s) {
     blocks.push(rule("#urlbar-container", [`max-width: ${s.urlbarMaxWidth}px`, "margin-inline: auto"]));
   }
   return blocks;
-}
-
-function indent(text) {
-  return text
-    .split("\n")
-    .map((line) => (line ? `  ${line}` : line))
-    .join("\n");
 }

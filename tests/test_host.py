@@ -198,6 +198,43 @@ class Profiles(unittest.TestCase):
         host.handle({"cmd": "apply", "css": "#x{}", "prefs": PREFS}, ctx)
         self.assertFalse(host.handle({"cmd": "remove"}, ctx)["titlebarLeftOn"])
 
+    def test_settle_drops_prefs_only_after_firefox_has_saved_them(self):
+        import time as _time
+        with open(os.path.join(self.a, "user.js"), "w") as f:
+            f.write('user_pref("browser.startup.page", 3);\n')
+        before = {"profiles": host.list_profiles(self.root), "running": {"path": self.a, "pid": 1, "startedAt": 1.0}}
+        host.handle({"cmd": "apply", "css": "#x{}", "prefs": dict(PREFS, **{"browser.tabs.inTitlebar": 0})}, before)
+        prefs_js = os.path.join(self.a, "prefs.js")
+
+        # The Firefox that applied hasn't restarted: the prefs aren't loaded yet.
+        self.assertFalse(host.handle({"cmd": "settle"}, before)["settled"])
+
+        # Restarted, but prefs.js not rewritten since: not saved yet.
+        started = _time.time() + 5
+        after = {"profiles": host.list_profiles(self.root), "running": {"path": self.a, "pid": 1, "startedAt": started}}
+        os.utime(prefs_js, (started - 1, started - 1))
+        self.assertFalse(host.handle({"cmd": "settle"}, after)["settled"])
+
+        # Saved: the block goes, the user's own user.js lines stay.
+        os.utime(prefs_js, (started + 1, started + 1))
+        self.assertTrue(host.handle({"cmd": "settle"}, after)["settled"])
+        self.assertEqual(read(os.path.join(self.a, "user.js")), 'user_pref("browser.startup.page", 3);\n')
+        self.assertFalse(host.handle({"cmd": "status"}, after)["installed"]["userJs"])
+
+        # The title bar is still handed back after a settle, from the stylesheet's record.
+        host.handle({"cmd": "apply", "css": "#x{}", "prefs": PREFS}, after)
+        self.assertIn('user_pref("browser.tabs.inTitlebar", -1);', read(os.path.join(self.a, "user.js")))
+
+    def test_settle_never_guesses_a_profile(self):
+        ctx = {"profiles": host.list_profiles(self.root), "running": None}
+        self.assertEqual(host.handle({"cmd": "settle"}, ctx), {"ok": True, "settled": False})
+
+    def test_stylesheets_may_not_load_other_files(self):
+        ctx = {"profiles": host.list_profiles(self.root), "running": {"path": self.a, "pid": 1, "startedAt": 1.0}}
+        for css in ('#x { background: url("https://example.com/t.png"); }', '@import "evil.css";', "#x{background:URL (a)}"):
+            with self.assertRaises(host.HostError, msg=css):
+                host.handle({"cmd": "apply", "css": css, "prefs": PREFS}, ctx)
+
     def test_apply_rejects_bad_input(self):
         ctx = {"profiles": host.list_profiles(self.root), "running": None}
         for msg in (

@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Kits Editor for Firefox",
   "version": "0.3.0",
-  "description": "Hide Firefox's tab bar and toolbar until you need them. Tabs on any edge, an auto-hiding toolbar, and control over size, color, animation and the address bar.",
+  "description": "Hide Firefox's tab bar and toolbar until you need them. Needs a small helper program: when you press Apply, it writes your design to userChrome.css and changes listed Firefox settings.",
   "author": "Matthew Saunders and Austin Laubach",
   "homepage_url": "https://github.com/mattsaund/kits-firefox-plugin",
   "icons": {
@@ -27,7 +27,8 @@
       "id": "autohide-tab-bar@kits",
       "strict_min_version": "155.0",
       "data_collection_permissions": {
-        "required": ["none"]
+        "required": ["none"],
+        "optional": ["technicalAndInteraction"]
       }
     }
   }

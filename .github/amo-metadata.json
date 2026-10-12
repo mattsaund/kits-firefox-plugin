@@ -1,0 +1,5 @@
+{
+  "version": {
+    "approval_notes": "Kits Editor for Firefox restyles Firefox's own interface (tab bar, toolbar, address bar), which extensions can't do directly, so it uses userChrome.css. A separate native messaging helper (native-host/ in the source repo; Python standard library only) is installed by the user with native-host/install.sh or install.ps1. When the user presses Apply on the settings page, the helper writes the generated stylesheet to <profile>/chrome/ and an allowlisted set of prefs to user.js; the settings page lists those prefs before Apply. The prefs are dropped from user.js once Firefox has saved them, so they apply once. To test: 1) install the helper: curl -fsSL https://github.com/mattsaund/kits-firefox-plugin/releases/latest/download/install.sh | sh  2) open the extension's settings page (toolbar button), choose a layout, press Apply  3) restart Firefox. The optional technicalAndInteraction data permission gates a twice-daily request to api.github.com for the latest release; no user data is sent and the add-on works fully without it. Full source: https://github.com/mattsaund/kits-firefox-plugin"
+  }
+}

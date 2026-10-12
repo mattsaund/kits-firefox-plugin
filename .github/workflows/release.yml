@@ -67,7 +67,8 @@ jobs:
           mkdir -p dist
           if [ -n "$AMO_API_KEY" ] && [ -n "$AMO_API_SECRET" ]; then
             npx web-ext sign --source-dir extension --artifacts-dir dist/signed \
-              --channel unlisted --api-key "$AMO_API_KEY" --api-secret "$AMO_API_SECRET"
+              --channel unlisted --amo-metadata .github/amo-metadata.json \
+              --api-key "$AMO_API_KEY" --api-secret "$AMO_API_SECRET"
             mv dist/signed/*.xpi "$xpi"
             echo "SIGNED=yes" >> "$GITHUB_ENV"
           else

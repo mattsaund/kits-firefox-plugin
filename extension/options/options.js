@@ -1,8 +1,21 @@
-import { EASINGS, FIELDS, defaults, firefoxPrefs, isVertical, sanitize } from "../shared/settings.js";
-import { generateCss } from "../shared/generate-css.js";
-import { REPO, compareVersions, currentVersion, storedUpdate } from "../shared/updates.js";
+// The settings page: the form, the live preview, the helper connection
+// (Apply / Remove), the list of what Apply changes, and update checks.
 
+import { EASINGS, FIELDS, defaults, easingCss, firefoxPrefs, isVertical, sanitize } from "../shared/settings.js";
+import { generateCss, hexToRgba } from "../shared/generate-css.js";
+import {
+  REPO,
+  UPDATE_CHECK_CONSENT,
+  compareVersions,
+  currentVersion,
+  storedUpdate,
+  updateChecksAllowed,
+} from "../shared/updates.js";
+
+// The native messaging helper's registered name (see native-host/install.sh).
 const HOST = "autohide_tab_bar";
+
+// One-line helper installers, shown when the helper is missing or outdated.
 const DOWNLOAD = `https://github.com/${REPO}/releases/latest/download`;
 const INSTALL_COMMANDS = {
   posix: `curl -fsSL ${DOWNLOAD}/install.sh | sh`,
@@ -11,13 +24,17 @@ const INSTALL_COMMANDS = {
 // Set from runtime.getPlatformInfo() in init().
 let onWindows = false;
 
+/** The helper install command for this system. */
 function installCommand() {
   return onWindows ? INSTALL_COMMANDS.win : INSTALL_COMMANDS.posix;
 }
 
 // Firefox's default tab height, for "Theme" tab thickness in the preview.
 const PREVIEW_TAB_HEIGHT = 32;
+// Room the preview leaves for the traffic lights, as the generated CSS does.
 const MAC_WINDOW_CONTROLS = 76;
+
+// Elements used throughout.
 
 const form = document.getElementById("settings");
 const preview = document.getElementById("preview");
@@ -31,9 +48,10 @@ const saveIndicator = document.getElementById("save-indicator");
 const cssOutput = document.getElementById("css-output");
 const manualPrefs = document.getElementById("manual-prefs");
 
-let settings = defaults();
-let currentHash = null;
-let profileOverride = null;
+// Page state.
+let settings = defaults(); // the form's current, sanitized values
+let currentHash = null; // hash of what Apply would write now, to spot unapplied changes
+let profileOverride = null; // a profile picked by hand, or null for this Firefox's own
 
 // Helper connection: "checking" | "missing" | "error" | "connected"
 let helper = "checking";
@@ -62,6 +80,7 @@ function h(tag, attrs = {}, ...children) {
 // Form <-> settings
 // ---------------------------------------------------------------------------
 
+/** Fills in the select menus and copies each number field's limits onto its inputs. */
 function setupControls() {
   const easing = form.elements.easing;
   for (const e of EASINGS) easing.append(h("option", { value: e.id }, e.label));
@@ -79,6 +98,7 @@ function setupControls() {
   }
 }
 
+/** The form's values as a sanitized settings object. */
 function readForm() {
   const raw = {};
   for (const [name, field] of Object.entries(FIELDS)) {
@@ -95,6 +115,7 @@ function readForm() {
   return sanitize(raw);
 }
 
+/** Puts a settings object into the form; leaves a number box alone while it's being typed in. */
 function writeForm(s) {
   for (const [name, field] of Object.entries(FIELDS)) {
     const el = form.elements[name];
@@ -130,6 +151,7 @@ function requirementMet(expr) {
   return expr.split("|").some((alternative) => alternative.split("&").every(termMet));
 }
 
+/** Shows, hides and disables rows according to the settings they depend on. */
 function updateDependents() {
   const orientation = isVertical(settings.position) ? "vertical" : "horizontal";
   for (const el of document.querySelectorAll("[data-show]")) {
@@ -154,11 +176,11 @@ function updateDependents() {
 // Preview, generated CSS
 // ---------------------------------------------------------------------------
 
-function hexToRgba(hex, opacity) {
-  const n = parseInt(hex.slice(1), 16);
-  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${opacity / 100})`;
-}
-
+/**
+ * Updates the preview to match the settings: the layout through data
+ * attributes and classes, sizes and colors through CSS custom properties
+ * that options.css feeds into the same arithmetic as the generated CSS.
+ */
 function renderPreview() {
   const s = settings;
   const vertical = isVertical(s.position);
@@ -178,25 +200,28 @@ function renderPreview() {
   else if (shared) toolbox.append(bar);
   else preview.querySelector(".pv-window").insertBefore(bar, preview.querySelector(".pv-page"));
 
+  // Layout and behavior.
   preview.dataset.position = s.position;
   preview.dataset.toolbar = s.toolbarPosition;
   preview.classList.toggle("overlay", s.overlay);
   preview.classList.toggle("static", !s.autoHide);
   preview.classList.toggle("tb-autohide", s.toolbarAutoHide);
   preview.classList.toggle("tabs-in-toolbox", shared && s.toolbarAutoHide);
-  set("--tbt", `${s.toolbarTriggerSize}px`);
-  set("--pv-tab-h", `${tabHeight}px`);
   preview.classList.toggle("shadow", s.autoHide && s.shadow);
   preview.classList.toggle("reduced", s.reducedMotion);
   preview.classList.toggle("hold", holdOpen.checked);
 
+  // Sizes and timing.
   set("--c", `${s.collapsedSize}px`);
   set("--x", `${expanded}px`);
   set("--t", `${s.triggerSize}px`);
+  set("--tbt", `${s.toolbarTriggerSize}px`);
+  set("--pv-tab-h", `${tabHeight}px`);
   set("--d", `${s.duration}ms`);
-  set("--e", EASINGS.find((e) => e.id === s.easing).css);
+  set("--e", easingCss(s.easing));
   set("--od", `${s.openDelay}ms`);
   set("--cd", `${s.closeDelay}ms`);
+  // Tab bar look; null falls back to the theme stand-ins in options.css.
   set("--bar-bg", s.backgroundCustom ? hexToRgba(s.backgroundColor, s.backgroundOpacity) : null);
   set("--bar-text", s.textCustom ? s.textColor : null);
   set("--sel", s.selectedCustom ? s.selectedColor : null);
@@ -208,6 +233,7 @@ function renderPreview() {
   const overNavRow = shared && s.position === "top" && s.tabsAboveToolbar;
   set("--mac-pad", overNavRow && s.autoHide && s.overlay && !s.toolbarAutoHide ? `${MAC_WINDOW_CONTROLS}px` : null);
 
+  // Toolbar and address bar look.
   set("--tb-bg", s.toolbarBgCustom ? s.toolbarBgColor : null);
   set("--tb-icon", s.toolbarIconCustom ? s.toolbarIconColor : null);
   set("--url-bg", s.urlbarBgCustom ? s.urlbarBgColor : null);
@@ -223,6 +249,30 @@ function renderPreview() {
   set("--edge", w > 0 ? `inset ${edgeOffsets[s.position]} 0 0 ${s.edgeColor}` : null);
 }
 
+// Plain-language names for the prefs Apply can change (see firefoxPrefs).
+// browser.urlbar.trimHttps always travels with trimURLs, so one line covers both.
+const PREF_LABELS = {
+  "toolkit.legacyUserProfileCustomizations.stylesheets": (v) => `Allow userChrome.css: ${v ? "on" : "off"}`,
+  "sidebar.verticalTabs": (v) => `Vertical tabs: ${v ? "on" : "off"}`,
+  "sidebar.position_start": (v) => `Sidebar side: ${v ? "left" : "right"}`,
+  "sidebar.visibility": () => "Sidebar: always shown",
+  "browser.tabs.inTitlebar": (v) => (v === 0 ? "Firefox's own title bar: on" : "Title bar: Firefox's default"),
+  "browser.urlbar.trimURLs": (v) => `Show full addresses: ${v ? "off" : "on"}`,
+  "browser.urlbar.suggest.searches": (v) => `Search suggestions in the address bar: ${v ? "on" : "off"}`,
+  "browser.urlbar.openintab": (v) => `Open address bar results in a new tab: ${v ? "on" : "off"}`,
+  "browser.urlbar.showSearchTerms.enabled": (v) => `Show search terms on results pages: ${v ? "on" : "off"}`,
+  "browser.urlbar.maxRichResults": (v) => `Address bar results: ${v}`,
+};
+
+/** The list, next to the Apply button, of Firefox settings Apply will change. */
+function renderApplyPrefs(prefs) {
+  const items = Object.entries(prefs)
+    .filter(([name]) => name in PREF_LABELS)
+    .map(([name, value]) => h("li", { title: `${name} = ${value}` }, PREF_LABELS[name](value)));
+  document.getElementById("apply-prefs").replaceChildren(...items);
+}
+
+/** The stylesheet and prefs shown in "Install manually". */
 function renderManual(css, prefs) {
   cssOutput.textContent = css;
   manualPrefs.textContent = Object.entries(prefs)
@@ -230,18 +280,20 @@ function renderManual(css, prefs) {
     .join("\n");
 }
 
+/** A fingerprint of what Apply writes, stored by the helper to spot unapplied changes. */
 async function contentHash(css, prefs) {
   const data = new TextEncoder().encode(`${css}\n${JSON.stringify(prefs)}`);
   const digest = await crypto.subtle.digest("SHA-256", data);
   return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
+/** Regenerates everything derived from the settings: CSS, prefs, hash. */
 async function refreshDerived() {
   const css = generateCss(settings);
   const prefs = firefoxPrefs(settings);
   renderManual(css, prefs);
-  const hash = await contentHash(css, prefs);
-  currentHash = hash;
+  renderApplyPrefs(prefs);
+  currentHash = await contentHash(css, prefs);
   renderHelper();
 }
 
@@ -252,6 +304,7 @@ async function refreshDerived() {
 let saveTimer = null;
 let indicatorTimer = null;
 
+/** Saves the settings shortly after the last change, and says so. */
 function scheduleSave() {
   clearTimeout(saveTimer);
   saveTimer = setTimeout(async () => {
@@ -263,6 +316,7 @@ function scheduleSave() {
   }, 300);
 }
 
+/** Everything that follows a settings change. */
 function onSettingsChanged() {
   updateDependents();
   renderPreview();
@@ -274,8 +328,10 @@ function onSettingsChanged() {
 // Helper (native messaging)
 // ---------------------------------------------------------------------------
 
+// The helper answered, but with an error (as opposed to not being reachable).
 class HostReplyError extends Error {}
 
+/** Sends one message to the helper, tracking whether it is installed and reachable. */
 async function callHost(message) {
   let reply;
   try {
@@ -295,6 +351,7 @@ async function callHost(message) {
   return reply;
 }
 
+/** Asks the helper what is installed where, and redraws the Apply card. */
 async function refreshStatus() {
   try {
     hostStatus = await callHost({ cmd: "status", profile: profileOverride });
@@ -312,11 +369,13 @@ async function refreshStatus() {
   renderHelper();
 }
 
+/** Remembers a hand-picked profile; picking this Firefox's own clears it. */
 async function setProfileOverride(path) {
   profileOverride = path && path !== hostStatus?.runningProfile ? path : null;
   await browser.storage.local.set({ profileOverride });
 }
 
+/** Apply or Remove through the helper. */
 async function runAction(action) {
   busy = true;
   renderHelper();
@@ -340,10 +399,12 @@ async function runAction(action) {
   }
 }
 
+/** A status message box; kind is ok, info, warn or error. */
 function status(kind, ...children) {
   return h("div", { class: `status ${kind}` }, h("div", {}, ...children));
 }
 
+/** How to quit Firefox on this system. */
 function quitHint() {
   const how = { Darwin: "⌘Q", Windows: "Menu → Exit" }[hostStatus?.platform] ?? "Menu → Quit";
   return `Quit Firefox completely (${how}) and open it again.`;
@@ -361,6 +422,7 @@ function needsProfileChoice() {
   return hostStatus?.profile.chosenBy === "guess";
 }
 
+/** The profile line under the status: a picker when there is a choice to make. */
 function profileLine() {
   const st = hostStatus;
   const label = (p) => `${p.name}${p.path === st.runningProfile ? " (this Firefox)" : ""}`;
@@ -382,6 +444,7 @@ function profileLine() {
   return h("div", { class: "profile-line" }, h("span", {}, `Profile: ${label(st.profile)}`));
 }
 
+/** The status messages for a connected helper. */
 function stateMessages() {
   const st = hostStatus;
   const inst = st.installed;
@@ -459,10 +522,14 @@ function stateMessages() {
 
 const updateCard = document.getElementById("update-card");
 const checkUpdatesButton = document.getElementById("check-updates");
+const updateChecksSwitch = document.getElementById("update-checks");
 let shownUpdate = null;
 
+/** The update switch, and the banner when a newer version is known. */
 async function renderUpdate() {
-  shownUpdate = await storedUpdate();
+  const allowed = await updateChecksAllowed();
+  updateChecksSwitch.checked = allowed;
+  shownUpdate = allowed ? await storedUpdate() : null;
   updateCard.hidden = !shownUpdate;
   if (shownUpdate) {
     document.getElementById("update-title").textContent = `Version ${shownUpdate.version} is available`;
@@ -477,9 +544,25 @@ document.getElementById("update-notes").addEventListener("click", () => {
   if (shownUpdate) browser.tabs.create({ url: shownUpdate.page });
 });
 
+// Consent goes through Firefox's own data permission, so this switch and the
+// one in about:addons are the same setting. permissions.request() has to be
+// the first thing the click handler awaits, or Firefox refuses it.
+updateChecksSwitch.addEventListener("change", async () => {
+  if (updateChecksSwitch.checked) {
+    updateChecksSwitch.checked = await browser.permissions.request(UPDATE_CHECK_CONSENT);
+  } else {
+    await browser.permissions.remove(UPDATE_CHECK_CONSENT);
+  }
+  renderUpdate();
+});
+browser.permissions.onAdded.addListener(renderUpdate);
+browser.permissions.onRemoved.addListener(renderUpdate);
+
 checkUpdatesButton.addEventListener("click", async () => {
+  // Checking by hand is still a request to GitHub, so it needs the same consent.
+  if (!updateChecksSwitch.checked && !(await browser.permissions.request(UPDATE_CHECK_CONSENT))) return;
   checkUpdatesButton.disabled = true;
-  checkUpdatesButton.textContent = "Checking…";
+  checkUpdatesButton.textContent = "Checking\u2026";
   let label;
   try {
     const update = await browser.runtime.sendMessage({ type: "check-for-update" });
@@ -490,11 +573,12 @@ checkUpdatesButton.addEventListener("click", async () => {
   await renderUpdate();
   checkUpdatesButton.textContent = label;
   setTimeout(() => {
-    checkUpdatesButton.textContent = "Check for updates";
+    checkUpdatesButton.textContent = "Check now";
     checkUpdatesButton.disabled = false;
   }, 3000);
 });
 
+/** Redraws the Apply card from the helper state. */
 function renderHelper() {
   const nodes = [];
   if (helper === "checking") {
@@ -554,6 +638,7 @@ function confirmable(button, armedLabel, run) {
   });
 }
 
+/** Shows text on a button for a moment. */
 function flashLabel(button, text) {
   const idle = button.textContent;
   button.textContent = text;
@@ -622,6 +707,7 @@ document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "visible" && !busy) refreshStatus();
 });
 
+/** Loads the saved settings and connects to the helper. */
 async function init() {
   setupControls();
   document.getElementById("version").textContent = currentVersion();

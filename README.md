@@ -39,11 +39,23 @@ web pages. Extensions aren't allowed to touch that, and Firefox only reads it
 from your profile's `userChrome.css` at startup. The helper writes the
 extension's stylesheet there for you, so you never edit files.
 
+## What Apply changes
+
+Only when you press **Apply**: your design goes into `userChrome.css` in your
+Firefox profile, and the Firefox settings the layout needs (vertical or
+horizontal tabs, sidebar side, title bar, any address bar options you picked)
+are listed on the settings page and applied once at your next restart. After
+that, Firefox's own settings work as usual.
+
+## Privacy
+
+Nothing is collected. If you allow it (at install, in the settings page or in
+`about:addons`), it asks GitHub for the latest release twice a day, so GitHub
+sees your IP address and Firefox version.
+
 ## Good to know
 
 - Only tab icons, no titles? Click Firefox's sidebar button once.
-- While applied, it decides vertical or horizontal tabs. Change the position in
-  the extension, not in Firefox's settings.
 
 ## Remove
 

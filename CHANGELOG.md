@@ -15,6 +15,15 @@ Each version is a `v` tag, with the extension and helper on its
 - **Tabs above or below the toolbar** when both are on the same edge.
 - **The toolbar has its own hover zone.**
 - **Tab thickness** for tabs on the top or bottom.
+- **Firefox settings apply once.** The settings Apply needs take effect at the
+  next restart and then stop being forced, so changes made in Firefox's own
+  settings stick.
+- **Clear about what Apply changes.** The settings page lists every Firefox
+  setting Apply will change, before you press it.
+- **Update checks need your consent.** They use Firefox's built-in "technical
+  and interaction data" choice (at install, in the settings page or in
+  about:addons) and are skipped without it.
+- The helper refuses stylesheets that could load other files.
 
 ## 0.2.1 — 2026-10-11
 

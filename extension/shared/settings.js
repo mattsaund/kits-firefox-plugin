@@ -3,8 +3,11 @@
 // Every value that reaches the generator goes through sanitize() first, so the
 // generated CSS can interpolate settings directly without further escaping.
 
+// Edges the tab bar can sit on. left/right use Firefox's vertical tabs,
+// top/bottom its horizontal tab strip.
 export const POSITIONS = ["left", "right", "top", "bottom"];
 
+// Animation styles offered on the settings page, with the CSS each one emits.
 export const EASINGS = [
   { id: "ease", label: "Smooth", css: "ease" },
   { id: "ease-in-out", label: "Gentle", css: "ease-in-out" },
@@ -16,6 +19,7 @@ export const EASINGS = [
 // Three-way choice for settings backed by a Firefox pref.
 export const TRI = ["keep", "on", "off"];
 
+// Field builders: each field knows its type, its limits and its default.
 const int = (min, max, def) => ({ type: "int", min, max, default: def });
 const bool = (def) => ({ type: "bool", default: def });
 const color = (def) => ({ type: "color", default: def });
@@ -105,10 +109,12 @@ export const FIELDS = {
 
 const COLOR_RE = /^#[0-9a-f]{6}$/i;
 
+/** Every field at its default value. */
 export function defaults() {
   return Object.fromEntries(Object.entries(FIELDS).map(([k, f]) => [k, f.default]));
 }
 
+/** One value made valid for its field: clamped, checked, or the default. */
 function clean(field, value) {
   switch (field.type) {
     case "int": {
@@ -140,18 +146,23 @@ export function sanitize(raw) {
   return s;
 }
 
+/** Whether a tab bar position uses Firefox's vertical tabs. */
 export function isVertical(position) {
   return position === "left" || position === "right";
 }
 
+/** The CSS timing function for an animation style id. */
 export function easingCss(id) {
   return (EASINGS.find((e) => e.id === id) ?? EASINGS[0]).css;
 }
 
 /**
- * Firefox prefs the helper writes to user.js. Layout (vertical vs horizontal
- * tabs, sidebar side) has to come from prefs: CSS alone can't move the tab
- * strip between the sidebar and the toolbar.
+ * Firefox prefs the helper writes to user.js on Apply. Layout (vertical vs
+ * horizontal tabs, sidebar side, title bar) has to come from prefs: CSS alone
+ * can't move the tab strip between the sidebar and the toolbar. Firefox reads
+ * them at the next start; once it has saved them, the helper drops them from
+ * user.js again (see "settle"), so they apply once. The settings page lists
+ * these before Apply.
  */
 export function firefoxPrefs(settings) {
   const s = sanitize(settings);
