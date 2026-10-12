@@ -30,7 +30,7 @@ import sys
 import tempfile
 import time
 
-VERSION = "0.3.5"
+VERSION = "0.4.0"
 
 CSS_FILENAME = "autohide-tab-bar.css"
 BACKUP_SUFFIX = ".ahtb-backup"
@@ -60,6 +60,7 @@ ALLOWED_PREFS = {
     "browser.urlbar.openintab": (bool, None),
     "browser.urlbar.showSearchTerms.enabled": (bool, None),
     "browser.urlbar.maxRichResults": (int, range(1, 21)),
+    "browser.toolbars.bookmarks.visibility": (str, {"always", "newtab", "never"}),
     # 0: Firefox's own title bar (for a bottom toolbar). -1: Firefox's default.
     "browser.tabs.inTitlebar": (int, {0, -1}),
 }

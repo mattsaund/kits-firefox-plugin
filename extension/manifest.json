@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Kits Editor for Firefox",
-  "version": "0.3.5",
+  "version": "0.4.0",
   "description": "Hide Firefox's tab bar and toolbar until you need them. Needs a small helper program: when you press Apply, it writes your design to userChrome.css and changes listed Firefox settings.",
   "author": "Matthew Saunders and Austin Laubach",
   "homepage_url": "https://github.com/mattsaund/kits-firefox-plugin",
@@ -9,13 +9,18 @@
     "48": "icons/icon.svg",
     "96": "icons/icon.svg"
   },
-  "permissions": ["storage", "nativeMessaging", "alarms"],
+  "permissions": ["storage", "nativeMessaging", "alarms", "scripting"],
+  "optional_host_permissions": ["<all_urls>"],
   "background": {
     "scripts": ["background.js"],
     "type": "module"
   },
   "action": {
     "default_title": "Kits Editor for Firefox settings",
+    "default_icon": "icons/icon.svg"
+  },
+  "page_action": {
+    "default_title": "Kits Editor for Firefox",
     "default_icon": "icons/icon.svg"
   },
   "options_ui": {

@@ -90,6 +90,11 @@
           <span class="row-label">Respect "reduce motion"<small>Skip the animation when your system asks for less motion</small></span>
           <input type="checkbox" class="switch" name="reducedMotion">
         </label>
+        <!-- Not a setting but Firefox's website access permission; see shared/click-through.js. -->
+        <label class="row" data-requires="autoHide|toolbarAutoHide">
+          <span class="row-label">Let clicks through to the page<small>Pointing at a link or button near the edge doesn't open the bar over it. Rest at the edge for a moment to open it anyway. Needs access to websites, only to see what's under the pointer. Nothing is read or sent.</small></span>
+          <input type="checkbox" class="switch" id="click-through">
+        </label>
       </section>
 
       <section class="card">
@@ -368,6 +373,65 @@
           <select id="f-urlbarResults" name="urlbarResults"></select>
         </div>
       </section>
+
+      <section class="card">
+        <h2>Bookmarks bar</h2>
+        <div class="row">
+          <span class="row-label">Show<small>Firefox's own setting, also under View &gt; Toolbars</small></span>
+          <div class="segmented small">
+            <label><input type="radio" name="bookmarksVisibility" value="keep"><span>Firefox</span></label>
+            <label><input type="radio" name="bookmarksVisibility" value="always"><span>Always</span></label>
+            <label><input type="radio" name="bookmarksVisibility" value="newtab"><span>New tab</span></label>
+            <label><input type="radio" name="bookmarksVisibility" value="never"><span>Never</span></label>
+          </div>
+        </div>
+        <div class="row color">
+          <span class="row-label">Background</span>
+          <div class="segmented small">
+            <label><input type="radio" name="bookmarksBgCustom" value="false"><span>Theme</span></label>
+            <label><input type="radio" name="bookmarksBgCustom" value="true"><span>Custom</span></label>
+          </div>
+          <input type="color" name="bookmarksBgColor" aria-label="Bookmarks bar background color" data-requires="bookmarksBgCustom">
+        </div>
+        <div class="row color">
+          <span class="row-label">Text and icons</span>
+          <div class="segmented small">
+            <label><input type="radio" name="bookmarksTextCustom" value="false"><span>Theme</span></label>
+            <label><input type="radio" name="bookmarksTextCustom" value="true"><span>Custom</span></label>
+          </div>
+          <input type="color" name="bookmarksTextColor" aria-label="Bookmarks bar text color" data-requires="bookmarksTextCustom">
+        </div>
+        <div class="row color">
+          <span class="row-label">Height</span>
+          <div class="segmented small">
+            <label><input type="radio" name="bookmarksHeightCustom" value="false"><span>Theme</span></label>
+            <label><input type="radio" name="bookmarksHeightCustom" value="true"><span>Custom</span></label>
+          </div>
+          <span class="swatch-spacer"></span>
+        </div>
+        <div class="row slider" data-requires="bookmarksHeightCustom">
+          <label class="row-label" for="f-bookmarksHeight">Bookmark height</label>
+          <input type="range" id="f-bookmarksHeight" name="bookmarksHeight" step="1">
+          <span class="num"><input type="number" data-for="bookmarksHeight" step="1"><em>px</em></span>
+        </div>
+        <div class="row color">
+          <span class="row-label">Text size</span>
+          <div class="segmented small">
+            <label><input type="radio" name="bookmarksFontCustom" value="false"><span>Theme</span></label>
+            <label><input type="radio" name="bookmarksFontCustom" value="true"><span>Custom</span></label>
+          </div>
+          <span class="swatch-spacer"></span>
+        </div>
+        <div class="row slider" data-requires="bookmarksFontCustom">
+          <label class="row-label" for="f-bookmarksFontSize">Font size</label>
+          <input type="range" id="f-bookmarksFontSize" name="bookmarksFontSize" step="1">
+          <span class="num"><input type="number" data-for="bookmarksFontSize" step="1"><em>px</em></span>
+        </div>
+        <label class="row">
+          <span class="row-label">Icons only<small>Hide the names, keep the icons</small></span>
+          <input type="checkbox" class="switch" name="bookmarksIconsOnly">
+        </label>
+      </section>
     </form>
 
     <aside class="side">
@@ -398,6 +462,12 @@
                 <span class="pv-lights"><i></i><i></i><i></i></span>
                 <span class="pv-btn">&#8249;</span><span class="pv-btn">&#8250;</span>
                 <span class="pv-url">example.com/article</span>
+              </div>
+              <div class="pv-bookmarks">
+                <span class="pv-bm"><i></i><span>News</span></span>
+                <span class="pv-bm"><i></i><span>Recipes</span></span>
+                <span class="pv-bm"><i></i><span>Work</span></span>
+                <span class="pv-bm"><i></i><span>Docs</span></span>
               </div>
             </div>
             <div class="pv-bar">

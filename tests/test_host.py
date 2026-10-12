@@ -94,6 +94,14 @@ class UserJs(unittest.TestCase):
             with self.assertRaises(host.HostError, msg=repr(bad)):
                 host.validate_prefs({"browser.urlbar.maxRichResults": bad})
 
+    def test_bookmarks_toolbar_pref(self):
+        for value in ("always", "newtab", "never"):
+            ok = {"browser.toolbars.bookmarks.visibility": value}
+            self.assertEqual(host.validate_prefs(ok), ok)
+        for bad in ("sometimes", True, 1):
+            with self.assertRaises(host.HostError, msg=repr(bad)):
+                host.validate_prefs({"browser.toolbars.bookmarks.visibility": bad})
+
 
 class Profiles(unittest.TestCase):
     def setUp(self):

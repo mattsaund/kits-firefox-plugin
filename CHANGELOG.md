@@ -3,6 +3,28 @@
 Each version is a `v` tag, with the extension and helper on its
 [release page](https://github.com/mattsaund/kits-firefox-plugin/releases).
 
+## 0.4.0 — 2026-10-12
+
+- **Let clicks through to the page**, a new switch under Behavior. Pointing
+  at a link or button near an edge, like a site's profile picture in the top
+  corner, no longer opens the bar over it. The hover zone lets the pointer
+  through, even overshooting right up to the edge. Rest at the edge for a
+  moment to open the bar anyway. It needs access to websites, which Firefox
+  asks you for when you switch it on, only to see what's under the pointer.
+  Nothing is read or sent, and switching it off gives the access back.
+- **Bookmarks bar settings**: when it shows (always, on new tabs, never),
+  background, text and icon color, height, text size, and icons only.
+- **Removing the extension puts Firefox's look back** right away, no restart
+  needed. Settings Firefox took on from Apply, like vertical tabs, stay as
+  Firefox settings.
+- **Reset all settings to defaults also resets the colors.** Every color now
+  follows your Firefox theme until you change it. After a reset, the button
+  reminds you to press Apply.
+- The settings page no longer scrolls sideways when it shows an install
+  command.
+- **Run the install command again** to update the helper, then press
+  **Apply**. The settings page reminds you.
+
 ## 0.3.5 — 2026-10-12
 
 - **Old userChrome.css edits no longer get in the way.** Anything else in

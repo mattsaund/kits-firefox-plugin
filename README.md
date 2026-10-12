@@ -2,8 +2,8 @@
 
 Hide Firefox's tab bar and toolbar until you need them, so the page gets the
 whole window. Tabs on any edge, the address bar on the top or bottom, and
-every size, color and speed set from a settings page inside Firefox, with a
-live preview.
+every size, color and speed of the tabs, toolbar, address bar and bookmarks
+bar set from a settings page inside Firefox, with a live preview.
 
 ## Install
 
@@ -45,9 +45,9 @@ Only when you press **Apply**: your design goes into `userChrome.css` in your
 Firefox profile. Anything you or another tool put in that file before is set
 aside in `userChrome.css.ahtb-backup` so it can't override the design;
 **Remove from Firefox** puts it back. The Firefox settings the layout needs
-(vertical or horizontal tabs, sidebar side, title bar, any address bar options
-you picked) are listed on the settings page and applied once at your next
-restart. After that, Firefox's own settings work as usual.
+(vertical or horizontal tabs, sidebar side, title bar, any address bar or
+bookmarks bar options you picked) are listed on the settings page and applied
+once at your next restart. After that, Firefox's own settings work as usual.
 
 ## Privacy
 
@@ -55,15 +55,23 @@ Nothing is collected. If you allow it (at install, in the settings page or in
 `about:addons`), it asks GitHub for the latest release twice a day, so GitHub
 sees your IP address and Firefox version.
 
+With **Let clicks through to the page** on, a small script on each page checks
+whether the pointer is on something clickable near an edge. It reads nothing
+else and sends nothing anywhere.
+
 ## Good to know
 
 - Only tab icons, no titles? Click Firefox's sidebar button once.
+- A bar opens over a link near the edge, like a site's profile picture? Turn
+  on **Let clicks through to the page** under Behavior.
 - Want Firefox's regular tab bar and toolbar back? **Reset tab bar and
   toolbar** under Position, then **Apply**.
 
 ## Remove
 
-**Remove from Firefox** in the settings page, restart Firefox, then:
+Removing the extension switches its look off right away. To also take its
+files out of your profile, press **Remove from Firefox** in the settings page
+first, restart Firefox, then remove the helper:
 
 ```sh
 curl -fsSL https://github.com/mattsaund/kits-firefox-plugin/releases/latest/download/install.sh | sh -s -- --uninstall

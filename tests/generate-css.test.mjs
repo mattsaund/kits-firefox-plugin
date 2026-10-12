@@ -6,7 +6,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import { generateCss } from "../extension/shared/generate-css.js";
-import { POSITIONS, REGULAR_LAYOUT, defaults, firefoxPrefs, sanitize } from "../extension/shared/settings.js";
+import { POSITIONS, REGULAR_LAYOUT, defaults, edgeZones, firefoxPrefs, isVertical, sanitize } from "../extension/shared/settings.js";
 
 const ALL_CUSTOM = {
   backgroundCustom: true,
@@ -74,7 +74,8 @@ test("defaults reproduce the original userChrome.css values", () => {
   assert.match(css, /--ahtb-duration: 200ms;/);
   assert.match(css, /--ahtb-easing: ease;/);
   assert.match(css, /--ahtb-close-delay: 150ms;/);
-  assert.match(css, /background-color: #000000 !important;/);
+  // Colors follow the Firefox theme until changed.
+  assert.doesNotMatch(css, /#000000/);
   assert.match(css, /#sidebar-launcher-splitter \{\n  display: none !important;/);
   for (const id of [
     "#tabContextMenu",
@@ -364,8 +365,8 @@ test("the hidden toolbar's hover zone lets the pointer through to a side tab bar
       assert.ok(back > through, "the open rule must follow the pass-through rule");
     }
   }
-  assert.doesNotMatch(generateCss({ ...defaults(), position: "top", toolbarAutoHide: true }), /pointer-events/);
-  assert.doesNotMatch(generateCss(defaults()), /pointer-events/);
+  assert.ok(!generateCss({ ...defaults(), position: "top", toolbarAutoHide: true }).includes("#sidebar-container:hover"));
+  assert.ok(!generateCss(defaults()).includes("#navigator-toolbox"));
 });
 
 test("hover zones go up to 100px", () => {
@@ -392,4 +393,107 @@ test("the regular layout is Firefox's own: top tabs, toolbar below, nothing hidi
     "toolkit.legacyUserProfileCustomizations.stylesheets": true,
     "sidebar.verticalTabs": false,
   });
+});
+
+
+test("hover zones over the page, for the click-through page script", () => {
+  assert.deepEqual(edgeZones(defaults()), [{ edge: "left", size: 10 }]);
+  assert.deepEqual(edgeZones({ ...defaults(), toolbarAutoHide: true, toolbarTriggerSize: 24 }), [
+    { edge: "left", size: 10 },
+    { edge: "top", size: 24 },
+  ]);
+  assert.deepEqual(edgeZones({ ...defaults(), autoHide: false }), []);
+  // A visible collapsed strip with no zone past it takes nothing from the page.
+  assert.deepEqual(edgeZones({ ...defaults(), collapsedSize: 8, triggerSize: 0 }), []);
+  // Tabs on the other edge from the toolbar have their own zone.
+  assert.deepEqual(edgeZones({ ...defaults(), position: "bottom", toolbarAutoHide: true }), [
+    { edge: "bottom", size: 10 },
+    { edge: "top", size: 10 },
+  ]);
+  // Tabs on the toolbar's edge hide with an auto-hiding toolbar, through its zone...
+  assert.deepEqual(edgeZones({ ...defaults(), position: "top", toolbarAutoHide: true, toolbarTriggerSize: 30 }), [
+    { edge: "top", size: 30 },
+  ]);
+  // ...and next to a toolbar that stays, reach the page only from its page side.
+  assert.deepEqual(edgeZones({ ...defaults(), position: "top", tabsAboveToolbar: true }), []);
+  assert.deepEqual(edgeZones({ ...defaults(), position: "top", tabsAboveToolbar: false }), [{ edge: "top", size: 10 }]);
+  assert.deepEqual(edgeZones({ ...defaults(), position: "bottom", toolbarPosition: "bottom", tabsAboveToolbar: true }), [
+    { edge: "bottom", size: 10 },
+  ]);
+  assert.deepEqual(edgeZones({ ...defaults(), position: "bottom", toolbarPosition: "bottom", tabsAboveToolbar: false }), []);
+});
+
+test("pointing at something clickable near an edge lets the pointer through every hover zone", () => {
+  const signal = ":has(#pageAction-urlbar-autohide-tab-bar_kits)";
+  for (const s of variants()) {
+    const css = generateCss(s);
+    const label = `${s.position} autoHide=${s.autoHide} toolbar=${s.toolbarPosition} toolbarAutoHide=${s.toolbarAutoHide}`;
+    // The page action is only a signal; its icon is never shown.
+    assert.match(css, /#pageAction-urlbar-autohide-tab-bar_kits \{\n  display: none !important;/, label);
+    const through = (target) => css.indexOf(`${signal} ${target} {\n  pointer-events: none !important;`);
+    const tabsInToolbox = !isVertical(s.position) && s.position === s.toolbarPosition;
+    if (s.autoHide && isVertical(s.position)) assert.ok(through("#sidebar-container") > 0, label);
+    if (s.autoHide && !isVertical(s.position) && !(tabsInToolbox && s.toolbarAutoHide)) {
+      assert.ok(through("#TabsToolbar") > 0, label);
+    }
+    if (s.toolbarAutoHide) {
+      const wipe = !isVertical(s.position) && !tabsInToolbox;
+      if (wipe) {
+        assert.ok(through("#navigator-toolbox::before") > 0, label);
+      } else {
+        // A toolbar held open (typing, a menu) takes the pointer back.
+        const zone = through("#navigator-toolbox");
+        assert.ok(zone > 0, label);
+        assert.ok(css.indexOf("translate: 0 0 !important;\n  pointer-events: auto !important;") > zone, label);
+      }
+    }
+  }
+});
+
+test("every rule applies only while the add-on is installed", () => {
+  const guard = '@media (-moz-pref("extensions.webextensions.ExtensionStorageIDB.migrated.autohide-tab-bar@kits")) {';
+  for (const s of variants()) {
+    const bare = stripComments(generateCss(s)).trim();
+    assert.ok(bare.startsWith(guard), `${s.position}: something comes before the guard`);
+    // The guard's block closes at the very end, so nothing follows it.
+    let depth = 0;
+    for (let i = 0; i < bare.length; i++) {
+      if (bare[i] === "{") depth++;
+      if (bare[i] === "}") depth--;
+      if (depth === 0 && i > guard.length) {
+        assert.equal(i, bare.length - 1, `${s.position}: a rule outside the guard`);
+        break;
+      }
+    }
+  }
+});
+
+test("bookmarks bar: Firefox's show setting, and a look of its own", () => {
+  assert.equal(firefoxPrefs(defaults())["browser.toolbars.bookmarks.visibility"], undefined);
+  for (const value of ["always", "newtab", "never"]) {
+    assert.equal(firefoxPrefs({ ...defaults(), bookmarksVisibility: value })["browser.toolbars.bookmarks.visibility"], value);
+  }
+  assert.equal(sanitize({ bookmarksVisibility: "sometimes" }).bookmarksVisibility, "keep");
+
+  assert.ok(!stripComments(generateCss(defaults())).includes("PersonalToolbar#PersonalToolbar"));
+  const css = generateCss({
+    ...defaults(),
+    toolbarAutoHide: true,
+    bookmarksBgCustom: true,
+    bookmarksBgColor: "#123456",
+    bookmarksTextCustom: true,
+    bookmarksHeightCustom: true,
+    bookmarksHeight: 30,
+    bookmarksFontCustom: true,
+    bookmarksFontSize: 14,
+    bookmarksIconsOnly: true,
+  });
+  assert.match(css, /#navigator-toolbox #PersonalToolbar#PersonalToolbar \{\n  background-color: #123456 !important;/);
+  // A 30px bookmark is the 16px icon plus 7px above and below.
+  assert.match(css, /--bookmark-block-padding: 7px !important;/);
+  assert.match(css, /toolbarbutton\.bookmark-item \{\n  height: 30px !important;\n  padding-block: 0 !important;\n  font-size: 14px !important;/);
+  assert.match(css, /toolbarbutton\.bookmark-item > \.toolbarbutton-text \{\n  display: none !important;/);
+  // It comes after the toolbar's look, which also reaches the bookmarks bar.
+  const toolbarLook = generateCss({ ...defaults(), toolbarBgCustom: true, bookmarksBgCustom: true });
+  assert.ok(toolbarLook.indexOf(":is(#nav-bar, #PersonalToolbar)") < toolbarLook.indexOf("#PersonalToolbar#PersonalToolbar"));
 });

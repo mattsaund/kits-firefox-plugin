@@ -29,7 +29,8 @@ const oneOf = (values, def) => ({ type: "enum", values, default: def });
 // page edge and takes its clicks, so much more than this would be in the way.
 const MAX_HOVER_ZONE = 100;
 
-// Defaults reproduce the original hand-written userChrome.css.
+// Defaults reproduce the original hand-written userChrome.css's layout, with
+// every color left to the Firefox theme.
 export const FIELDS = {
   position: oneOf(POSITIONS, "left"),
 
@@ -56,7 +57,7 @@ export const FIELDS = {
   closeDelay: int(0, 2000, 150),
   reducedMotion: bool(true),
 
-  backgroundCustom: bool(true),
+  backgroundCustom: bool(false),
   backgroundColor: color("#000000"),
   backgroundOpacity: int(10, 100, 100),
   textCustom: bool(false),
@@ -100,6 +101,20 @@ export const FIELDS = {
   urlbarFontSize: int(10, 22, 14),
   urlbarWidthCustom: bool(false),
   urlbarMaxWidth: int(300, 2000, 800),
+
+  // Bookmarks toolbar. Showing it is Firefox's own setting; "keep" leaves it alone.
+  bookmarksVisibility: oneOf(["keep", "always", "newtab", "never"], "keep"),
+  bookmarksBgCustom: bool(false),
+  bookmarksBgColor: color("#2b2a33"),
+  bookmarksTextCustom: bool(false),
+  bookmarksTextColor: color("#fbfbfe"),
+  // Height of each bookmark: Firefox's 16px icon plus padding above and below.
+  bookmarksHeightCustom: bool(false),
+  bookmarksHeight: int(18, 40, 24),
+  bookmarksFontCustom: bool(false),
+  bookmarksFontSize: int(9, 18, 12),
+  // Bookmarks show only their icons, without names.
+  bookmarksIconsOnly: bool(false),
 
   // Address bar behavior. These are Firefox prefs; "keep" leaves whatever the
   // user has set in Firefox untouched.
@@ -166,6 +181,31 @@ export function isVertical(position) {
   return position === "left" || position === "right";
 }
 
+/**
+ * The hover zones that lie over the page, as { edge, size } in px: the
+ * transparent strips past a hidden bar's visible edge that catch the pointer
+ * (see generate-css.js). The page script behind "Let clicks through to the
+ * page" uses these to tell when the pointer is near one.
+ */
+export function edgeZones(settings) {
+  const s = sanitize(settings);
+  const zones = new Map();
+  const add = (edge, size) => {
+    if (size > 0) zones.set(edge, Math.max(size, zones.get(edge) ?? 0));
+  };
+  const tabsOnToolbarEdge = !isVertical(s.position) && s.position === s.toolbarPosition;
+  if (s.autoHide && !tabsOnToolbarEdge) add(s.position, s.triggerSize);
+  // Tabs on the toolbar's edge hide along with an auto-hiding toolbar, through
+  // its zone. Next to a toolbar that stays, their zone reaches over the page
+  // only from the page's side of the toolbar.
+  if (s.autoHide && tabsOnToolbarEdge && !s.toolbarAutoHide) {
+    const onPageSide = s.position === "top" ? !s.tabsAboveToolbar : s.tabsAboveToolbar;
+    if (onPageSide) add(s.position, s.triggerSize);
+  }
+  if (s.toolbarAutoHide) add(s.toolbarPosition, s.toolbarTriggerSize);
+  return [...zones].map(([edge, size]) => ({ edge, size }));
+}
+
 /** The CSS timing function for an animation style id. */
 export function easingCss(id) {
   return (EASINGS.find((e) => e.id === id) ?? EASINGS[0]).css;
@@ -213,5 +253,6 @@ export function firefoxPrefs(settings) {
     if (s[key] !== "keep") prefs[pref] = s[key] === "on";
   }
   if (s.urlbarResults > 0) prefs["browser.urlbar.maxRichResults"] = s.urlbarResults;
+  if (s.bookmarksVisibility !== "keep") prefs["browser.toolbars.bookmarks.visibility"] = s.bookmarksVisibility;
   return prefs;
 }

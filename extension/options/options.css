@@ -111,9 +111,12 @@ code {
   padding: 16px 24px 48px;
 }
 
+/* minmax(0, 1fr): a column never grows past its space to fit something wide,
+   like an install command; code boxes scroll inside instead. */
 .settings,
 .more {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 16px;
 }
 
@@ -132,6 +135,7 @@ code {
 .side {
   grid-area: side;
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 16px;
   position: sticky;
   top: var(--side-top, 16px);
@@ -531,6 +535,13 @@ a.primary {
   margin-top: 8px;
 }
 
+/* The message may hold an install command; it scrolls inside its box rather
+   than stretching the column. */
+.status > div {
+  flex: 1;
+  min-width: 0;
+}
+
 .status::before {
   content: "";
   flex: none;
@@ -724,6 +735,44 @@ a.primary {
   padding: 6px 12px;
   color: var(--tb-icon, var(--muted));
   background: var(--tb-bg, var(--pv-window));
+}
+
+/* The bookmarks bar, under the nav row; its look falls back to the toolbar's. */
+.pv-bookmarks {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 10px 4px;
+  overflow: hidden;
+  color: var(--bm-text, var(--tb-icon, var(--muted)));
+  background: var(--bm-bg, var(--tb-bg, var(--pv-window)));
+  font-size: var(--bm-font, 11px);
+}
+
+.preview.bm-hidden .pv-bookmarks {
+  display: none;
+}
+
+.pv-bm {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: var(--bm-h, 24px);
+  padding: 0 6px;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+
+.pv-bm i {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  background: currentColor;
+  opacity: 0.55;
+}
+
+.preview.bm-icons .pv-bm > span {
+  display: none;
 }
 
 /* Toolbar auto-hide, mirroring the generated CSS: the toolbox floats over

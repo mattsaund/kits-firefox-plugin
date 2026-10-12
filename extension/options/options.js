@@ -1,7 +1,9 @@
 // The settings page: the form, the live preview, the helper connection
-// (Apply / Remove), the list of what Apply changes, and update checks.
+// (Apply / Remove), the list of what Apply changes, update checks and "Let
+// clicks through to the page".
 
 import { EASINGS, FIELDS, REGULAR_LAYOUT, defaults, easingCss, firefoxPrefs, isVertical, sanitize } from "../shared/settings.js";
+import { CLICK_THROUGH_ACCESS, clickThroughAllowed } from "../shared/click-through.js";
 import { generateCss, hexToRgba } from "../shared/generate-css.js";
 import {
   REPO,
@@ -17,7 +19,8 @@ const HOST = "autohide_tab_bar";
 
 // The oldest helper this version of the extension works with. Raise it when a
 // release changes the helper; releases that don't, don't ask for an update.
-const HELPER_NEEDED = "0.3.5";
+// 0.4.0: the bookmarks toolbar setting joined the helper's allowed prefs.
+const HELPER_NEEDED = "0.4.0";
 
 // One-line helper installers, shown when the helper is missing or outdated.
 const DOWNLOAD = `https://github.com/${REPO}/releases/latest/download`;
@@ -249,6 +252,14 @@ function renderPreview() {
   set("--url-font", s.urlbarFontCustom ? `${s.urlbarFontSize}px` : null);
   set("--url-max", s.urlbarWidthCustom ? `${s.urlbarMaxWidth}px` : null);
 
+  // Bookmarks bar, shown unless set to never.
+  preview.classList.toggle("bm-hidden", s.bookmarksVisibility === "never");
+  preview.classList.toggle("bm-icons", s.bookmarksIconsOnly);
+  set("--bm-bg", s.bookmarksBgCustom ? s.bookmarksBgColor : null);
+  set("--bm-text", s.bookmarksTextCustom ? s.bookmarksTextColor : null);
+  set("--bm-h", s.bookmarksHeightCustom ? `${s.bookmarksHeight}px` : null);
+  set("--bm-font", s.bookmarksFontCustom ? `${s.bookmarksFontSize}px` : null);
+
   const w = s.edgeWidth;
   const edgeOffsets = { left: `-${w}px 0`, right: `${w}px 0`, top: `0 -${w}px`, bottom: `0 ${w}px` };
   set("--edge", w > 0 ? `inset ${edgeOffsets[s.position]} 0 0 ${s.edgeColor}` : null);
@@ -267,6 +278,8 @@ const PREF_LABELS = {
   "browser.urlbar.openintab": (v) => `Open address bar results in a new tab: ${v ? "on" : "off"}`,
   "browser.urlbar.showSearchTerms.enabled": (v) => `Show search terms on results pages: ${v ? "on" : "off"}`,
   "browser.urlbar.maxRichResults": (v) => `Address bar results: ${v}`,
+  "browser.toolbars.bookmarks.visibility": (v) =>
+    `Bookmarks toolbar: ${{ always: "always shown", newtab: "only on new tabs", never: "never shown" }[v]}`,
 };
 
 /** The list, next to the Apply button, of Firefox settings Apply will change. */
@@ -578,6 +591,29 @@ updateChecksSwitch.addEventListener("change", async () => {
 browser.permissions.onAdded.addListener(renderUpdate);
 browser.permissions.onRemoved.addListener(renderUpdate);
 
+// ---------------------------------------------------------------------------
+// Let clicks through to the page
+// ---------------------------------------------------------------------------
+
+const clickThroughSwitch = document.getElementById("click-through");
+
+/** The switch shows Firefox's website access permission (see shared/click-through.js). */
+async function renderClickThrough() {
+  clickThroughSwitch.checked = await clickThroughAllowed();
+}
+
+// As with update checks, permissions.request() has to be the first thing the
+// handler awaits. background.js starts and stops the page script.
+clickThroughSwitch.addEventListener("change", async () => {
+  if (clickThroughSwitch.checked) {
+    clickThroughSwitch.checked = await browser.permissions.request(CLICK_THROUGH_ACCESS);
+  } else {
+    await browser.permissions.remove(CLICK_THROUGH_ACCESS);
+  }
+});
+browser.permissions.onAdded.addListener(renderClickThrough);
+browser.permissions.onRemoved.addListener(renderClickThrough);
+
 checkUpdatesButton.addEventListener("click", async () => {
   // Checking by hand is still a request to GitHub, so it needs the same consent.
   if (!updateChecksSwitch.checked && !(await browser.permissions.request(UPDATE_CHECK_CONSENT))) return;
@@ -659,23 +695,27 @@ function confirmable(button, armedLabel, run) {
 }
 
 /** Shows text on a button for a moment. */
-function flashLabel(button, text) {
+function flashLabel(button, text, ms = 1500) {
   const idle = button.textContent;
   button.textContent = text;
-  setTimeout(() => (button.textContent = idle), 1500);
+  setTimeout(() => (button.textContent = idle), ms);
 }
 
 applyButton.addEventListener("click", () => runAction("apply"));
 confirmable(removeButton, "Click again to remove", () => runAction("remove"));
+// Resets change the settings here; Firefox follows at the next Apply, as
+// with any other change, so the button says so for a moment.
 confirmable(resetButton, "Click again to reset everything", () => {
   settings = defaults();
   writeForm(settings);
   onSettingsChanged();
+  flashLabel(resetButton, "Reset. Press Apply to use it.", 4000);
 });
 confirmable(resetLayoutButton, "Click again to reset the tab bar and toolbar", () => {
   settings = sanitize({ ...settings, ...REGULAR_LAYOUT });
   writeForm(settings);
   onSettingsChanged();
+  flashLabel(resetLayoutButton, "Reset. Press Apply to use it.", 4000);
 });
 
 document.getElementById("copy-css").addEventListener("click", async (e) => {
@@ -698,6 +738,8 @@ document.getElementById("download-css").addEventListener("click", () => {
 
 form.addEventListener("input", (e) => {
   const target = e.target;
+  // The click-through switch sits in the form but is a permission, not a setting.
+  if (!target.name && !target.dataset.for) return;
   if (target.dataset.for) {
     // Typing in a number box: follow along only once the value is in range,
     // so "1" on the way to "150" doesn't snap to the minimum.
@@ -748,6 +790,7 @@ async function init() {
   document.getElementById("version").textContent = currentVersion();
   onWindows = (await browser.runtime.getPlatformInfo()).os === "win";
   renderUpdate();
+  renderClickThrough();
   const stored = await browser.storage.local.get(["settings", "profileOverride"]);
   settings = sanitize(stored.settings ?? {});
   profileOverride = stored.profileOverride ?? null;

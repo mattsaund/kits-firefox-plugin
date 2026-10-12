@@ -61,15 +61,45 @@ const OPAQUE_THEME_BACKGROUND = [
 // How far the held state sits from the closed one (see holdRule).
 const NUDGE = "0.01px";
 
+// "Let clicks through to the page": while the pointer is on something
+// clickable near an edge, the extension's page script has the background
+// script show this address bar icon on that tab (content/click-through.js). A
+// page action is the one piece of per-tab state an extension can set that
+// appears in Firefox's own markup, so it serves as the signal; the icon itself
+// is never displayed. While it exists, the hover zones let the pointer through.
+const PAGE_ACTION = "#pageAction-urlbar-autohide-tab-bar_kits";
+const PAGE_WANTS_POINTER = `:has(${PAGE_ACTION})`;
+
+// Firefox sets this pref when the add-on first stores something and clears it
+// when the add-on is removed. Prefs load before the first window, so rules
+// guarded by it are in place from the first paint, and removing the add-on
+// switches them off at once, without a restart.
+const INSTALLED_PREF = "extensions.webextensions.ExtensionStorageIDB.migrated.autohide-tab-bar@kits";
+
 /** The full stylesheet for a settings object. */
 export function generateCss(input) {
   const s = sanitize(input);
-  const blocks = [header(s), variables(s)];
+  return `${header(s)}
+
+/* Everything below applies only while ${PRODUCT_NAME} is installed (see INSTALLED_PREF). */
+@media (-moz-pref("${INSTALLED_PREF}")) {
+
+${rules(s)}
+}
+`;
+}
+
+/** Every rule of the stylesheet. */
+function rules(s) {
+  const blocks = [variables(s)];
   blocks.push(...(isVertical(s.position) ? verticalRules(s) : horizontalRules(s)));
   blocks.push(...appearanceRules(s));
   blocks.push(...toolbarRules(s));
   blocks.push(...urlbarRules(s));
+  blocks.push(...bookmarksRules(s));
   if (s.reducedMotion && (s.autoHide || s.toolbarAutoHide)) blocks.push(reducedMotionRule(s));
+  blocks.push(`/* The signal from "Let clicks through to the page" (see PAGE_ACTION); never shown. */
+${rule(PAGE_ACTION, ["display: none"])}`);
   return blocks.join("\n\n") + "\n";
 }
 
@@ -284,6 +314,12 @@ ${rule(T, [
     );
   }
 
+  // The signal only exists while the pointer is on the page, so the bar is
+  // closed or closing and nothing of it is in use.
+  blocks.push(`/* Pointing at something clickable near the edge: the hover zone lets the
+   pointer through to the page (see PAGE_ACTION). */
+${rule(`:root${PAGE_WANTS_POINTER} ${T}`, ["pointer-events: none"])}`);
+
   blocks.push(`/* Hold the current state while the pointer is out of Firefox's sight (see holdRule). */
 ${sides
   .map(({ sel, inner }) =>
@@ -418,6 +454,10 @@ ${rule(T, [...collapsed, "position: fixed", fixedAt, "margin: 0"])}`);
       ]),
     );
   }
+
+  blocks.push(`/* Pointing at something clickable near the edge: the hover zone lets the
+   pointer through to the page (see PAGE_ACTION). */
+${rule(`${HGUARD}${PAGE_WANTS_POINTER} #TabsToolbar`, ["pointer-events: none"])}`);
 
   // The tabs stay pinned to the strip's outer edge, so they slide into view
   // rather than being uncovered in place. Firefox already aligns them to the
@@ -643,19 +683,25 @@ ${rule(
   // Clipped parts of a row don't take the pointer, so the strip stays live
   // underneath until the rows have been revealed over it.
   ["z-index: -1"],
-)}`);
+)}
+
+/* Pointing at something clickable near the edge: the strip lets the pointer
+   through to the page (see PAGE_ACTION). */
+${rule(`${HGUARD}${PAGE_WANTS_POINTER} #navigator-toolbox::before`, ["pointer-events: none"])}`);
     return blocks;
   }
 
   const hiddenTranslate = bottom ? `0 calc(100% - ${trigger})` : `0 calc(${trigger} - 100%)`;
   const heldTranslate = bottom ? `0 calc(100% - ${trigger} - ${NUDGE})` : `0 calc(${trigger} - 100% + ${NUDGE})`;
-  // A side tab bar runs the window's full height, so the hidden toolbar's
-  // hover zone lies over its first (or last) tabs. While the pointer is on
-  // the tab bar the zone lets it through to them. A toolbar held open by
-  // typing, a menu or a panel takes the pointer back: pointer-events: auto in
-  // the open rule, which comes later with selectors at least as specific. (Its
-  // plain :hover one is less specific, but the toolbar and the tab bar can't
-  // both be under the pointer.)
+  // The hidden toolbar's hover zone lets the pointer through in two cases
+  // below. A toolbar held open by typing, a menu or a panel takes the pointer
+  // back: pointer-events: auto in the open rule, which comes later with
+  // selectors at least as specific. (Its plain :hover one is less specific,
+  // but the pointer can't be on the toolbar and somewhere else at once.)
+  //
+  // A side tab bar runs the window's full height, so the zone lies over its
+  // first (or last) tabs; while the pointer is on the tab bar the zone lets it
+  // through to them.
   if (L.vertical) {
     const onTabBar = [":has(#sidebar-container:hover)", ":has(#tabbrowser-tabs[movingtab])", ":has(tab-group[movingtabgroup])"];
     blocks.push(`/* The hidden toolbar's hover zone doesn't cover a side tab bar in use. */
@@ -664,6 +710,9 @@ ${rule(
   ["pointer-events: none"],
 )}`);
   }
+  blocks.push(`/* Pointing at something clickable near the edge: the hover zone lets the
+   pointer through to the page (see PAGE_ACTION). */
+${rule(`${HGUARD}${PAGE_WANTS_POINTER} #navigator-toolbox`, ["pointer-events: none"])}`);
   blocks.push(`/* Toolbar auto-hide. The toolbox floats over the page and slides out of view,
    leaving only its transparent inner border (the hover zone) inside the
    window. translate percentages are relative to the toolbox's own height, so
@@ -682,7 +731,7 @@ ${rule(TB, [
 
 ${holdRule(HGUARD, "#navigator-toolbox", [`translate: ${heldTranslate}`])}
 
-${rule(open, ["translate: 0 0", ...(L.vertical ? ["pointer-events: auto"] : []), "transition-delay: var(--ahtb-open-delay)"])}`);
+${rule(open, ["translate: 0 0", "pointer-events: auto", "transition-delay: var(--ahtb-open-delay)"])}`);
   return blocks;
 }
 
@@ -764,6 +813,40 @@ function urlbarRules(s) {
 
   if (s.urlbarWidthCustom) {
     blocks.push(rule("#urlbar-container", [`max-width: ${s.urlbarMaxWidth}px`, "margin-inline: auto"]));
+  }
+  return blocks;
+}
+
+/**
+ * The bookmarks toolbar's look. Firefox shows or hides it from a pref (see
+ * firefoxPrefs). The toolbar's own look reaches it too, so these come after.
+ */
+function bookmarksRules(s) {
+  // The repeated id outranks the auto-hiding toolbar's background, which
+  // reaches the bar through #navigator-toolbox.
+  const BAR = "#navigator-toolbox #PersonalToolbar#PersonalToolbar";
+  const ITEM = "#PersonalToolbar toolbarbutton.bookmark-item";
+  const bar = [];
+  if (s.bookmarksBgCustom) bar.push(`background-color: ${s.bookmarksBgColor}`, "background-image: none");
+  if (s.bookmarksTextCustom) bar.push(`color: ${s.bookmarksTextColor}`, `--toolbarbutton-icon-fill: ${s.bookmarksTextColor}`);
+  // Firefox sizes a bookmark as its 16px icon plus this padding above and
+  // below, which the bar's own height follows. A name in a bigger font than
+  // the icon would stretch that, so the bookmarks get the height outright too.
+  const item = [];
+  if (s.bookmarksHeightCustom) {
+    bar.push(`--bookmark-block-padding: ${(s.bookmarksHeight - 16) / 2}px`);
+    item.push(`height: ${s.bookmarksHeight}px`, "padding-block: 0");
+  }
+  if (s.bookmarksFontCustom) item.push(`font-size: ${s.bookmarksFontSize}px`);
+
+  const blocks = [];
+  if (bar.length) blocks.push(rule(BAR, bar));
+  if (item.length) blocks.push(rule(ITEM, item));
+  if (s.bookmarksIconsOnly) {
+    blocks.push(`/* Bookmarks as icons only. */
+${rule(`${ITEM} > .toolbarbutton-text`, ["display: none"])}
+
+${rule(`${ITEM} > .toolbarbutton-icon`, ["margin-inline-end: 0"])}`);
   }
   return blocks;
 }
