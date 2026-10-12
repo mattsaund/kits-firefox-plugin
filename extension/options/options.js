@@ -536,13 +536,15 @@ async function renderUpdate() {
   updateCard.hidden = !shownUpdate;
   if (shownUpdate) {
     document.getElementById("update-title").textContent = `Version ${shownUpdate.version} is available`;
-    document.getElementById("update-download").textContent = `Download ${shownUpdate.version}`;
+    const download = document.getElementById("update-download");
+    download.textContent = `Download ${shownUpdate.version}`;
+    // Following the link hands the .xpi to Firefox's installer and this page
+    // stays put. (A tab opened for it with tabs.create stays blank: Firefox
+    // drops installs that no click on the page started.)
+    download.href = shownUpdate.download;
   }
 }
 
-document.getElementById("update-download").addEventListener("click", () => {
-  if (shownUpdate) browser.tabs.create({ url: shownUpdate.download });
-});
 document.getElementById("update-notes").addEventListener("click", () => {
   if (shownUpdate) browser.tabs.create({ url: shownUpdate.page });
 });
@@ -709,6 +711,16 @@ showZone.addEventListener("change", renderPreview);
 document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "visible" && !busy) refreshStatus();
 });
+
+// The preview column sticks 16px from the top. When it's taller than the
+// window, it sticks that much higher instead, so it scrolls along with the
+// page until its bottom is in view (see .side in options.css).
+const side = document.querySelector(".side");
+function fitSide() {
+  side.style.setProperty("--side-top", `${Math.min(16, innerHeight - side.offsetHeight - 16)}px`);
+}
+new ResizeObserver(fitSide).observe(side);
+addEventListener("resize", fitSide);
 
 /** Loads the saved settings and connects to the helper. */
 async function init() {

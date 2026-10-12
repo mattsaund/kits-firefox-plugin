@@ -39,9 +39,10 @@ browser.permissions.onRemoved.addListener((removed) => {
   if (removed.data_collection?.includes("technicalAndInteraction")) scheduleChecks();
 });
 
-// The settings page asks for a check with this message ("Check now").
+// The settings page asks for a check with this message ("Check now"). It
+// shows what it finds in its own banner, so no popup for that version.
 browser.runtime.onMessage.addListener((message) => {
-  if (message?.type === "check-for-update") return runCheck();
+  if (message?.type === "check-for-update") return runCheck({ announce: false });
 });
 
 async function scheduleChecks() {
@@ -54,7 +55,7 @@ async function scheduleChecks() {
   await showBadge();
 }
 
-async function runCheck() {
+async function runCheck({ announce = true } = {}) {
   if (!(await updateChecksAllowed())) return null;
   let update = null;
   try {
@@ -64,7 +65,8 @@ async function runCheck() {
     update = await storedUpdate();
   }
   await showBadge();
-  if (update) await announceOnce(update);
+  if (update && announce) await announceOnce(update);
+  else if (update) await browser.storage.local.set({ announcedVersion: update.version });
   return update;
 }
 

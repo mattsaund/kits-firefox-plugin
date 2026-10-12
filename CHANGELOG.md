@@ -3,6 +3,21 @@
 Each version is a `v` tag, with the extension and helper on its
 [release page](https://github.com/mattsaund/kits-firefox-plugin/releases).
 
+## 0.3.2 — 2026-10-11
+
+- **The update Download button installs the update.** It used to open an
+  empty tab that Firefox never installed from, which looks like a black
+  screen with the bars hidden. Now Firefox asks to allow the install, then to
+  add the update, and you stay where you were.
+- **The settings page scrolls to the bottom from anywhere.** Scrolling over
+  the preview column no longer gets stuck. Updates, manual install and reset
+  moved below the settings.
+- **Check now** shows a new version on the settings page only, without the
+  popup window.
+- The icon's arrow points right: `˙>˙`.
+- Coming from 0.3.1 or earlier: that version's Download button still opens
+  the empty tab. Instead, click the `.xpi` file on this release page.
+
 ## 0.3.1 — 2026-10-11
 
 - **New icon:** a yellow-orange `.>.` turned upside down, on the toolbar

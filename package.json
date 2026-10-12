@@ -1,6 +1,6 @@
 {
   "name": "kits-firefox-plugin",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "private": true,
   "description": "Firefox extension: an auto-hiding tab bar on any edge of the window.",
   "license": "MIT",

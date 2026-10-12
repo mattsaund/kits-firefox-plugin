@@ -1,9 +1,9 @@
-<!-- Kits Editor icon: ".>." turned upside down, so the dots sit on top and
-     the arrow points left. Yellow-orange reads on light and dark toolbars. -->
+<!-- Kits Editor icon: ".>." with the dots raised to the top, so it reads
+     "˙>˙". Yellow-orange reads on light and dark toolbars. -->
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
   <g fill="#f6a21e">
     <circle cx="5" cy="10.5" r="2.75"/>
     <circle cx="27" cy="10.5" r="2.75"/>
   </g>
-  <path d="M20.25 9L11.75 16l8.5 7" fill="none" stroke="#f6a21e" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M11.75 9L20.25 16l-8.5 7" fill="none" stroke="#f6a21e" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/>
 </svg>

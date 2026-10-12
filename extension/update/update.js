@@ -18,9 +18,11 @@ if (!update) {
 } else {
   document.getElementById("new-version").textContent = update.version;
   document.getElementById("current-version").textContent = currentVersion();
-  document.getElementById("download").textContent = `Download ${update.version}`;
+  const download = document.getElementById("download");
+  download.textContent = `Download ${update.version}`;
+  // A real link: Firefox only installs from a click on the page itself.
+  download.href = update.download;
 
-  document.getElementById("download").addEventListener("click", () => open(update.download));
   document.getElementById("notes").addEventListener("click", () => open(update.page));
   document.getElementById("later").addEventListener("click", () => window.close());
 }

@@ -369,9 +369,11 @@
     <aside class="side">
       <section id="update-card" class="card update-card" hidden>
         <h2 id="update-title"></h2>
-        <p class="hint">Firefox will ask you to confirm the install. Your settings are kept.</p>
+        <p class="hint">Firefox asks you to allow the install, then to add the update. Your settings are kept.</p>
         <div class="actions">
-          <button id="update-download" type="button" class="primary">Download</button>
+          <!-- A real link: Firefox only starts an add-on install from a click
+               on the page itself, not from a tab an extension opens. -->
+          <a id="update-download" class="primary">Download</a>
           <button id="update-notes" type="button" class="ghost">What's new</button>
         </div>
       </section>
@@ -432,7 +434,9 @@
           <button id="remove" type="button" class="ghost danger">Remove from Firefox</button>
         </div>
       </section>
+    </aside>
 
+    <div class="more">
       <details class="card manual">
         <summary>Install manually, without the helper</summary>
         <ol>
@@ -465,7 +469,7 @@
         Version <span id="version"></span> ·
         <a href="https://github.com/mattsaund/kits-firefox-plugin" target="_blank" rel="noopener">GitHub</a>
       </p>
-    </aside>
+    </div>
   </main>
 </body>
 </html>
