@@ -14,8 +14,9 @@ let onWindows = false;
 function installCommand() {
   return onWindows ? INSTALL_COMMANDS.win : INSTALL_COMMANDS.posix;
 }
-// Matches the default "Match Firefox's tab height" closely enough for the preview.
-const PREVIEW_AUTO_HEIGHT = 44;
+
+// Firefox's default tab height, for "Theme" tab thickness in the preview.
+const PREVIEW_TAB_HEIGHT = 32;
 const MAC_WINDOW_CONTROLS = 76;
 
 const form = document.getElementById("settings");
@@ -110,13 +111,23 @@ function writeForm(s) {
   }
 }
 
-/** "key", "!key", or alternatives joined with "|" (any one is enough). */
+/** Tab bar and toolbar on the same edge (tabs sit inside the toolbar area). */
+function sharedEdge() {
+  return !isVertical(settings.position) && settings.position === settings.toolbarPosition;
+}
+
+/** One term: "key", "!key" or "key=value". "sharedEdge" is derived. */
+function termMet(term) {
+  const negate = term.startsWith("!");
+  const [key, expected] = (negate ? term.slice(1) : term).split("=");
+  const value = key === "sharedEdge" ? sharedEdge() : settings[key];
+  const met = expected === undefined ? Boolean(value) : String(value) === expected;
+  return negate ? !met : met;
+}
+
+/** Terms joined with "&" (all needed), alternatives with "|" (any one is enough). */
 function requirementMet(expr) {
-  return expr.split("|").some((part) => {
-    const negate = part.startsWith("!");
-    const value = Boolean(settings[negate ? part.slice(1) : part]);
-    return negate ? !value : value;
-  });
+  return expr.split("|").some((alternative) => alternative.split("&").every(termMet));
 }
 
 function updateDependents() {
@@ -124,8 +135,8 @@ function updateDependents() {
   for (const el of document.querySelectorAll("[data-show]")) {
     el.hidden = el.dataset.show !== orientation;
   }
-  for (const el of document.querySelectorAll("[data-show-position]")) {
-    el.hidden = el.dataset.showPosition !== settings.position || !requirementMet(el.dataset.showIf ?? "position");
+  for (const el of document.querySelectorAll("[data-show-if]")) {
+    el.hidden = !requirementMet(el.dataset.showIf);
   }
   for (const row of form.querySelectorAll(".row[data-requires]")) {
     row.classList.toggle("disabled", !requirementMet(row.dataset.requires));
@@ -151,20 +162,30 @@ function hexToRgba(hex, opacity) {
 function renderPreview() {
   const s = settings;
   const vertical = isVertical(s.position);
-  const expanded = vertical ? s.expandedWidth : s.expandedHeightAuto ? PREVIEW_AUTO_HEIGHT : s.expandedHeight;
+  const shared = sharedEdge();
+  const tabHeight = s.tabHeightCustom ? s.tabHeight : PREVIEW_TAB_HEIGHT;
+  // Firefox's strip is the tab height plus a 6px margin above and below.
+  const autoHeight = tabHeight + 12;
+  const expanded = vertical ? s.expandedWidth : s.expandedHeightAuto ? autoHeight : s.expandedHeight;
   const style = preview.style;
   const set = (prop, value) => (value == null ? style.removeProperty(prop) : style.setProperty(prop, value));
 
-  // Tabs at the top sit in the toolbox above the nav row, as in Firefox.
+  // Tabs on the toolbar's edge sit inside the toolbox, above or below the nav
+  // row, as in Firefox; otherwise they are their own row of the window.
   const bar = preview.querySelector(".pv-bar");
-  if (s.position === "top") preview.querySelector(".pv-toolbox").prepend(bar);
+  const toolbox = preview.querySelector(".pv-toolbox");
+  if (shared && s.tabsAboveToolbar) toolbox.prepend(bar);
+  else if (shared) toolbox.append(bar);
   else preview.querySelector(".pv-window").insertBefore(bar, preview.querySelector(".pv-page"));
 
   preview.dataset.position = s.position;
+  preview.dataset.toolbar = s.toolbarPosition;
   preview.classList.toggle("overlay", s.overlay);
   preview.classList.toggle("static", !s.autoHide);
   preview.classList.toggle("tb-autohide", s.toolbarAutoHide);
-  preview.classList.toggle("tabs-in-toolbox", s.position === "top" && s.toolbarAutoHide);
+  preview.classList.toggle("tabs-in-toolbox", shared && s.toolbarAutoHide);
+  set("--tbt", `${s.toolbarTriggerSize}px`);
+  set("--pv-tab-h", `${tabHeight}px`);
   preview.classList.toggle("shadow", s.autoHide && s.shadow);
   preview.classList.toggle("reduced", s.reducedMotion);
   preview.classList.toggle("hold", holdOpen.checked);
@@ -183,10 +204,9 @@ function renderPreview() {
   set("--hov", s.hoverCustom ? s.hoverColor : null);
   set("--tab-radius", s.radiusCustom ? `${s.radius}px` : null);
   set("--zone", showZone.checked && (s.autoHide || s.toolbarAutoHide) ? "color-mix(in srgb, var(--accent) 30%, transparent)" : null);
-  set(
-    "--mac-pad",
-    s.position === "top" && s.autoHide && s.overlay && !s.toolbarAutoHide ? `${MAC_WINDOW_CONTROLS}px` : null,
-  );
+  // The strip slides over the nav row only when it sits above it at the top.
+  const overNavRow = shared && s.position === "top" && s.tabsAboveToolbar;
+  set("--mac-pad", overNavRow && s.autoHide && s.overlay && !s.toolbarAutoHide ? `${MAC_WINDOW_CONTROLS}px` : null);
 
   set("--tb-bg", s.toolbarBgCustom ? s.toolbarBgColor : null);
   set("--tb-icon", s.toolbarIconCustom ? s.toolbarIconColor : null);
@@ -379,7 +399,19 @@ function stateMessages() {
   }
 
   if (lastAction === "removed" && !inst.cssFile) {
-    out.push(status("ok", h("p", {}, "Removed. Restart Firefox to get its normal tab bar back."), h("p", { class: "sub" }, quitHint())));
+    out.push(
+      status(
+        "ok",
+        h("p", {}, "Removed. Restart Firefox to get its normal tab bar back."),
+        h("p", { class: "sub" }, quitHint()),
+        st.titlebarLeftOn &&
+          h(
+            "p",
+            { class: "sub" },
+            "Firefox's own title bar stays on from the bottom toolbar. To turn it off, right-click the toolbar, choose Customize Toolbar and untick Title Bar.",
+          ),
+      ),
+    );
   } else if (!inst.cssFile) {
     out.push(status("info", h("p", {}, "Not applied to this profile yet."), h("p", { class: "sub" }, "Press Apply when you like how the preview looks.")));
   } else if (currentHash && inst.hash !== currentHash) {

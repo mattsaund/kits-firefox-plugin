@@ -36,6 +36,9 @@ export const FIELDS = {
   // Height of the bar when open, for top/bottom. "Auto" follows Firefox's own tab height.
   expandedHeightAuto: bool(true),
   expandedHeight: int(24, 120, 44),
+  // Height of the tabs themselves, for top/bottom.
+  tabHeightCustom: bool(false),
+  tabHeight: int(20, 60, 32),
   // Invisible strip past the visible edge that catches the pointer.
   triggerSize: int(0, 40, 10),
 
@@ -63,7 +66,12 @@ export const FIELDS = {
   radius: int(0, 20, 6),
 
   // Toolbar (the row with the address bar). Shares the animation settings above.
+  toolbarPosition: oneOf(["top", "bottom"], "top"),
+  // With the tabs on the toolbar's edge: tab strip above (true) or below it.
+  tabsAboveToolbar: bool(true),
   toolbarAutoHide: bool(false),
+  // The hidden toolbar keeps nothing visible but this strip, so it can't be 0.
+  toolbarTriggerSize: int(2, 40, 10),
   toolbarBgCustom: bool(false),
   toolbarBgColor: color("#1c1b22"),
   toolbarIconCustom: bool(false),
@@ -129,10 +137,6 @@ export function sanitize(raw) {
   if (s.autoHide && s.collapsedSize + s.triggerSize < 2) {
     s.triggerSize = 2 - s.collapsedSize;
   }
-  // The hidden toolbar keeps nothing visible but its hover strip.
-  if (s.toolbarAutoHide && s.triggerSize < 2) {
-    s.triggerSize = 2;
-  }
   return s;
 }
 
@@ -161,6 +165,12 @@ export function firefoxPrefs(settings) {
     // "always-show" keeps the tab strip mounted and at full width; the CSS
     // does the hiding. Firefox's own expand-on-hover would fight it.
     prefs["sidebar.visibility"] = "always-show";
+  }
+  if (s.toolbarPosition === "bottom") {
+    // The window controls live in the toolbar, and macOS can't place its
+    // native buttons at the bottom of a window. Firefox's own title bar keeps
+    // them at the top. (The helper puts the default back when this goes away.)
+    prefs["browser.tabs.inTitlebar"] = 0;
   }
 
   if (s.urlbarFullUrls !== "keep") {

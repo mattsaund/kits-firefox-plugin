@@ -28,7 +28,7 @@ import sys
 import tempfile
 import time
 
-VERSION = "0.2.1"
+VERSION = "0.3.0"
 
 CSS_FILENAME = "autohide-tab-bar.css"
 BACKUP_SUFFIX = ".ahtb-backup"
@@ -58,7 +58,10 @@ ALLOWED_PREFS = {
     "browser.urlbar.openintab": (bool, None),
     "browser.urlbar.showSearchTerms.enabled": (bool, None),
     "browser.urlbar.maxRichResults": (int, range(1, 21)),
+    # 0: Firefox's own title bar (for a bottom toolbar). -1: Firefox's default.
+    "browser.tabs.inTitlebar": (int, {0, -1}),
 }
+TITLEBAR_PREF = "browser.tabs.inTitlebar"
 
 
 class HostError(Exception):
@@ -447,13 +450,25 @@ def apply(msg, ctx):
             shutil.copy2(paths["userChrome"], backup)
     write_atomic(paths["userChrome"], with_import(user_chrome or ""))
 
-    write_atomic(paths["userJs"], with_prefs(read_text(paths["userJs"]) or "", prefs))
+    user_js = read_text(paths["userJs"]) or ""
+    if forced_native_titlebar(user_js) and TITLEBAR_PREF not in prefs:
+        # We switched Firefox's own title bar on for a bottom toolbar; it's no
+        # longer needed, so hand the choice back to Firefox's default.
+        prefs = dict(prefs, **{TITLEBAR_PREF: -1})
+    write_atomic(paths["userJs"], with_prefs(user_js, prefs))
     return status({"profile": profile}, ctx)
+
+
+def forced_native_titlebar(user_js):
+    """Whether our managed user.js block turned Firefox's title bar on."""
+    block = re.search(re.escape(USERJS_BEGIN) + r"(.*?)" + re.escape(USERJS_END), user_js, re.S)
+    return bool(block and format_pref(TITLEBAR_PREF, 0) in block.group(1))
 
 
 def remove(msg, ctx):
     profile = target_profile(msg, ctx)
     paths = profile_paths(profile)
+    titlebar_left_on = forced_native_titlebar(read_text(paths["userJs"]) or "")
 
     if os.path.exists(paths["css"]):
         os.unlink(paths["css"])
@@ -469,7 +484,11 @@ def remove(msg, ctx):
             write_atomic(paths[key], stripped)
         else:
             os.unlink(paths[key])
-    return status({"profile": profile}, ctx)
+    result = status({"profile": profile}, ctx)
+    # Firefox keeps the last value of a pref user.js set; the settings page
+    # says how to turn the title bar back off.
+    result["titlebarLeftOn"] = titlebar_left_on
+    return result
 
 
 COMMANDS = {"status": status, "apply": apply, "remove": remove}

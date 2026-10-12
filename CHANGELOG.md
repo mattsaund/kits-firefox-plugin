@@ -3,6 +3,19 @@
 Each version is a `v` tag, with the extension and helper on its
 [release page](https://github.com/mattsaund/kits-firefox-plugin/releases).
 
+## 0.3.0 — 2026-10-11
+
+- **Bars stay put when the pointer leaves Firefox's sight.** Pushing against
+  the screen edge, opening a right-click menu, reaching for the window
+  buttons or opening Edit Bookmark no longer closes the tab bar or toolbar.
+  They close once the pointer is back over the page.
+- **Toolbar on the top or bottom.** At the bottom the address bar's results
+  open upward, and Firefox's own title bar keeps the window buttons at the
+  top.
+- **Tabs above or below the toolbar** when both are on the same edge.
+- **The toolbar has its own hover zone.**
+- **Tab thickness** for tabs on the top or bottom.
+
 ## 0.2.1 — 2026-10-11
 
 - **Signed by Mozilla**, so regular Firefox installs it permanently.

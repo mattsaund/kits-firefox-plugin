@@ -75,7 +75,7 @@ class UserJs(unittest.TestCase):
         self.assertNotIn("sidebar.visibility", twice)
 
     def test_rejects_unlisted_or_mistyped_prefs(self):
-        for bad in ({"security.sandbox.content.level": 0}, {"sidebar.verticalTabs": "yes"}, {"sidebar.visibility": "evil"}):
+        for bad in ({"security.sandbox.content.level": 0}, {"sidebar.verticalTabs": "yes"}, {"sidebar.visibility": "evil"}, {"browser.tabs.inTitlebar": 1}):
             with self.assertRaises(host.HostError):
                 host.validate_prefs(bad)
         with self.assertRaises(host.HostError):
@@ -175,6 +175,28 @@ class Profiles(unittest.TestCase):
         status = host.handle({"cmd": "status"}, {"profiles": host.list_profiles(self.root), "running": running})
         self.assertEqual(status["profile"]["path"], running["path"])
         self.assertEqual(status["profiles"][0]["path"], running["path"])
+
+    def test_titlebar_is_handed_back_when_the_bottom_toolbar_goes(self):
+        ctx = {"profiles": host.list_profiles(self.root), "running": {"path": self.a, "pid": 1, "startedAt": 1.0}}
+        bottom = dict(PREFS, **{"browser.tabs.inTitlebar": 0})
+        host.handle({"cmd": "apply", "css": "#x{}", "prefs": bottom}, ctx)
+        user_js = read(os.path.join(self.a, "user.js"))
+        self.assertIn('user_pref("browser.tabs.inTitlebar", 0);', user_js)
+
+        # Toolbar back on top: Firefox's default title bar comes back once.
+        host.handle({"cmd": "apply", "css": "#x{}", "prefs": PREFS}, ctx)
+        self.assertIn('user_pref("browser.tabs.inTitlebar", -1);', read(os.path.join(self.a, "user.js")))
+        # ...and isn't pinned after that.
+        host.handle({"cmd": "apply", "css": "#x{}", "prefs": PREFS}, ctx)
+        self.assertNotIn("inTitlebar", read(os.path.join(self.a, "user.js")))
+
+    def test_remove_reports_a_title_bar_left_on(self):
+        ctx = {"profiles": host.list_profiles(self.root), "running": {"path": self.a, "pid": 1, "startedAt": 1.0}}
+        host.handle({"cmd": "apply", "css": "#x{}", "prefs": dict(PREFS, **{"browser.tabs.inTitlebar": 0})}, ctx)
+        self.assertTrue(host.handle({"cmd": "remove"}, ctx)["titlebarLeftOn"])
+        host.handle({"cmd": "apply", "css": "#x{}", "prefs": PREFS}, ctx)
+        host.handle({"cmd": "apply", "css": "#x{}", "prefs": PREFS}, ctx)
+        self.assertFalse(host.handle({"cmd": "remove"}, ctx)["titlebarLeftOn"])
 
     def test_apply_rejects_bad_input(self):
         ctx = {"profiles": host.list_profiles(self.root), "running": None}

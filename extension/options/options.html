@@ -48,7 +48,7 @@
 
       <section class="card">
         <h2>Behavior</h2>
-        <p class="hint section-hint">Animation, delays and the hover zone apply to the tab bar and, if it auto-hides, the toolbar.</p>
+        <p class="hint section-hint">Animation and delays apply to the tab bar and, if it auto-hides, the toolbar.</p>
         <label class="row">
           <span class="row-label">Auto-hide<small>Collapse when the pointer leaves, open when it reaches the edge</small></span>
           <input type="checkbox" class="switch" name="autoHide">
@@ -101,13 +101,26 @@
           <input type="range" id="f-expandedHeight" name="expandedHeight" step="1">
           <span class="num"><input type="number" data-for="expandedHeight" step="1"><em>px</em></span>
         </div>
+        <div class="row color" data-show="horizontal">
+          <span class="row-label">Tab thickness</span>
+          <div class="segmented small">
+            <label><input type="radio" name="tabHeightCustom" value="false"><span>Theme</span></label>
+            <label><input type="radio" name="tabHeightCustom" value="true"><span>Custom</span></label>
+          </div>
+          <span class="swatch-spacer"></span>
+        </div>
+        <div class="row slider" data-show="horizontal" data-requires="tabHeightCustom">
+          <label class="row-label" for="f-tabHeight">Tab height</label>
+          <input type="range" id="f-tabHeight" name="tabHeight" step="1">
+          <span class="num"><input type="number" data-for="tabHeight" step="1"><em>px</em></span>
+        </div>
         <div class="row slider" data-requires="autoHide">
           <label class="row-label" for="f-collapsedSize">Closed size<small>How much stays visible when hidden. 0 hides it completely.</small></label>
           <input type="range" id="f-collapsedSize" name="collapsedSize" step="1">
           <span class="num"><input type="number" data-for="collapsedSize" step="1"><em>px</em></span>
         </div>
-        <div class="row slider" data-requires="autoHide|toolbarAutoHide">
-          <label class="row-label" for="f-triggerSize">Hover zone<small>Invisible strip along the edge that opens the bar. Larger is easier to hit but covers more of the page edge.</small></label>
+        <div class="row slider" data-requires="autoHide">
+          <label class="row-label" for="f-triggerSize">Hover zone<small>Invisible strip along the edge that opens the tab bar. Larger is easier to hit but covers more of the page edge.</small></label>
           <input type="range" id="f-triggerSize" name="triggerSize" step="1">
           <span class="num"><input type="number" data-for="triggerSize" step="1"><em>px</em></span>
         </div>
@@ -187,11 +200,31 @@
 
       <section class="card">
         <h2>Toolbar</h2>
+        <div class="row">
+          <span class="row-label">Position<small>The row with the address bar</small></span>
+          <div class="segmented">
+            <label><input type="radio" name="toolbarPosition" value="top"><span>Top</span></label>
+            <label><input type="radio" name="toolbarPosition" value="bottom"><span>Bottom</span></label>
+          </div>
+        </div>
+        <p class="hint row-hint" data-show-if="toolbarPosition=bottom">Firefox's own title bar turns on, so the window buttons stay at the top.</p>
+        <div class="row" data-show-if="sharedEdge">
+          <span class="row-label">Tabs<small>The tab bar is on the same edge as the toolbar</small></span>
+          <div class="segmented">
+            <label><input type="radio" name="tabsAboveToolbar" value="true"><span>Above the toolbar</span></label>
+            <label><input type="radio" name="tabsAboveToolbar" value="false"><span>Below the toolbar</span></label>
+          </div>
+        </div>
         <label class="row">
-          <span class="row-label">Auto-hide the toolbar<small>Slides down over the page when the pointer reaches the top edge. Stays open while you type in the address bar or a menu is open.</small></span>
+          <span class="row-label">Auto-hide the toolbar<small>Slides in when the pointer reaches its edge. Stays open while you type in the address bar or a menu is open.</small></span>
           <input type="checkbox" class="switch" name="toolbarAutoHide">
         </label>
-        <p class="hint row-hint" data-show-position="top" data-show-if="toolbarAutoHide">With the tab bar at the top, the tabs hide along with the toolbar.</p>
+        <p class="hint row-hint" data-show-if="sharedEdge&amp;toolbarAutoHide">The tabs on this edge hide along with the toolbar.</p>
+        <div class="row slider" data-requires="toolbarAutoHide">
+          <label class="row-label" for="f-toolbarTriggerSize">Hover zone<small>Invisible strip along the edge that opens the toolbar</small></label>
+          <input type="range" id="f-toolbarTriggerSize" name="toolbarTriggerSize" step="1">
+          <span class="num"><input type="number" data-for="toolbarTriggerSize" step="1"><em>px</em></span>
+        </div>
         <div class="row color">
           <span class="row-label">Toolbar background</span>
           <div class="segmented small">
@@ -350,6 +383,7 @@
         </div>
         <div id="preview" class="preview">
           <div class="pv-window">
+            <div class="pv-titlebar"><span class="pv-lights"><i></i><i></i><i></i></span></div>
             <div class="pv-toolbox">
               <div class="pv-nav">
                 <span class="pv-lights"><i></i><i></i><i></i></span>

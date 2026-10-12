@@ -33,15 +33,23 @@ function variants() {
   for (const position of POSITIONS) {
     for (const autoHide of [true, false]) {
       for (const overlay of [true, false]) {
-        for (const toolbarAutoHide of [false, true]) {
+        for (const [toolbarAutoHide, toolbarPosition, tabsAboveToolbar] of [
+          [false, "top", true],
+          [true, "top", true],
+          [false, "top", false],
+          [true, "bottom", true],
+          [false, "bottom", false],
+          [true, "bottom", false],
+        ]) {
           for (const extra of [
             {},
             ALL_CUSTOM,
             TOOLBAR_CUSTOM,
             { backgroundCustom: false },
             { expandedHeightAuto: false },
+            { tabHeightCustom: true, shadow: true },
           ]) {
-            out.push({ ...defaults(), position, autoHide, overlay, toolbarAutoHide, ...extra });
+            out.push({ ...defaults(), position, autoHide, overlay, toolbarAutoHide, toolbarPosition, tabsAboveToolbar, ...extra });
           }
         }
       }
@@ -196,7 +204,7 @@ test("prefs select the tab layout and sidebar side", () => {
 
 test("toolbar auto-hide slides the toolbox and keeps it open while in use", () => {
   const css = generateCss({ ...defaults(), toolbarAutoHide: true });
-  assert.match(css, /translate: 0 calc\(var\(--ahtb-trigger\) - 100%\) !important;/);
+  assert.match(css, /translate: 0 calc\(var\(--ahtb-toolbar-trigger\) - 100%\) !important;/);
   assert.ok(css.includes(":root:not([inFullscreen], [customizing]) #navigator-toolbox:hover"));
   assert.ok(css.includes("#navigator-toolbox:has(:is(#nav-bar, #PersonalToolbar, #toolbar-menubar):focus-within)"));
   assert.ok(css.includes('#navigator-toolbox:has(:is(#nav-bar, #PersonalToolbar, #toolbar-menubar) [open]:not([open="false"]))'));
@@ -252,8 +260,9 @@ test("address bar prefs are only written when changed from Firefox's setting", (
   assert.equal(firefoxPrefs({ urlbarFullUrls: "off" })["browser.urlbar.trimURLs"], true);
 });
 
-test("an auto-hiding toolbar always keeps a hover strip", () => {
-  assert.equal(sanitize({ toolbarAutoHide: true, autoHide: false, triggerSize: 0 }).triggerSize, 2);
+test("an auto-hiding toolbar always keeps a hover strip of its own", () => {
+  assert.equal(sanitize({ toolbarTriggerSize: 0 }).toolbarTriggerSize, 2);
+  assert.match(generateCss({ ...defaults(), toolbarAutoHide: true, toolbarTriggerSize: 24 }), /--ahtb-toolbar-trigger: 24px;/);
 });
 
 test("release versions compare numerically", async () => {
@@ -274,4 +283,64 @@ test("top overlay clears the window controls on macOS and Windows", () => {
 test("an auto-hidden toolbar opens for the Alt menu bar", () => {
   const css = generateCss({ ...defaults(), toolbarAutoHide: true });
   assert.ok(css.includes('#navigator-toolbox:has(#toolbar-menubar[autohide="true"]:not([inactive]))'));
+});
+
+test("hold rules keep every auto-hiding piece as it is while the pointer is out of sight", () => {
+  const holds = (css, target) =>
+    [":not(:hover)", ":has(:is(menupopup, panel):hover)", ":has(#window-modal-dialog[open])"].every((c) =>
+      css.includes(`${c} ${target}`),
+    );
+  const vertical = generateCss({ ...defaults(), shadow: true });
+  assert.ok(holds(vertical, "#sidebar-container:not([sidebar-positionend])"));
+  assert.match(vertical, /min-width: calc\(var\(--ahtb-collapsed\) \+ var\(--ahtb-trigger\) \+ 0\.01px\) !important;/);
+  assert.match(vertical, /margin-inline-end: calc\(-1 \* var\(--ahtb-trigger\) - 0\.01px\) !important;/);
+  assert.match(vertical, /filter: drop-shadow\(0 0 0\.01px/);
+  assert.match(vertical, /transition-delay: 86400s !important;/);
+
+  const top = generateCss({ ...defaults(), position: "top", toolbarAutoHide: false });
+  assert.ok(holds(top, "#TabsToolbar"));
+  assert.match(top, /margin-bottom: calc\(-1 \* var\(--ahtb-trigger\) - 0\.01px\) !important;/);
+
+  const toolbar = generateCss({ ...defaults(), toolbarAutoHide: true });
+  assert.ok(holds(toolbar, "#navigator-toolbox"));
+  assert.match(toolbar, /translate: 0 calc\(var\(--ahtb-toolbar-trigger\) - 100% \+ 0\.01px\) !important;/);
+
+  const pushBottom = generateCss({ ...defaults(), position: "bottom", overlay: false });
+  assert.ok(holds(pushBottom, "#browser"));
+});
+
+test("tab thickness sets Firefox's tab height for horizontal tabs only", () => {
+  assert.match(generateCss({ ...defaults(), position: "top", tabHeightCustom: true, tabHeight: 24 }), /:root \{\n  --tab-min-height: 24px !important;/);
+  assert.doesNotMatch(generateCss({ ...defaults(), tabHeightCustom: true, tabHeight: 24 }), /--tab-min-height/);
+});
+
+test("toolbar at the bottom moves the toolbox, flips the address bar results and asks for Firefox's title bar", () => {
+  const css = generateCss({ ...defaults(), toolbarPosition: "bottom" });
+  assert.match(css, /#navigator-toolbox \{\n  order: 1 !important;/);
+  assert.match(css, /\.urlbarView:popover-open \{\n  position-area: block-start center !important;/);
+  assert.equal(firefoxPrefs({ toolbarPosition: "bottom" })["browser.tabs.inTitlebar"], 0);
+  assert.ok(!("browser.tabs.inTitlebar" in firefoxPrefs({ toolbarPosition: "top" })));
+
+  const hidden = generateCss({ ...defaults(), toolbarPosition: "bottom", toolbarAutoHide: true });
+  assert.match(hidden, /translate: 0 calc\(100% - var\(--ahtb-toolbar-trigger\)\) !important;/);
+  assert.match(hidden, /border-top: var\(--ahtb-toolbar-trigger\) solid transparent !important;/);
+});
+
+test("tabs on the other edge from the toolbar are a fixed strip; on the same edge they are ordered", () => {
+  const topTabsBottomBar = generateCss({ ...defaults(), position: "top", toolbarPosition: "bottom" });
+  assert.match(topTabsBottomBar, /position: fixed !important;\n  inset: 0 0 auto 0 !important;/);
+  assert.match(topTabsBottomBar, /#browser \{\n  margin-top: var\(--ahtb-collapsed\) !important;/);
+
+  const wiped = generateCss({ ...defaults(), position: "top", toolbarPosition: "bottom", toolbarAutoHide: true });
+  assert.match(wiped, /clip-path: inset\(100% 0 0 0\) !important;/);
+  assert.match(wiped, /#navigator-toolbox::before \{[^}]*inset: auto 0 0 0 !important;/);
+
+  const below = generateCss({ ...defaults(), position: "top", tabsAboveToolbar: false });
+  assert.match(below, /#TabsToolbar \{\n  order: 10 !important;/);
+  assert.match(below, /#nav-bar > \.titlebar-buttonbox-container/);
+  assert.doesNotMatch(below, /-moz-platform: macos/);
+
+  const bottomBoth = generateCss({ ...defaults(), position: "bottom", toolbarPosition: "bottom" });
+  assert.match(bottomBoth, /position: relative !important;\n  margin-top: calc\(-1 \* var\(--ahtb-trigger\)\) !important;/);
+  assert.doesNotMatch(bottomBoth, /position: fixed/);
 });

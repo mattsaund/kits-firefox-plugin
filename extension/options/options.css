@@ -633,13 +633,45 @@ button:disabled {
 .preview[data-position="right"] .pv-window {
   grid-template: "nav nav" auto "page bar" 1fr / 1fr auto;
 }
-/* Top: the script moves the bar into .pv-toolbox, above the nav row,
-   which is where Firefox's tab strip lives too. */
+/* Tabs on the toolbar's edge: the script moves the bar into .pv-toolbox,
+   above or below the nav row, which is where Firefox's tab strip lives too. */
 .preview[data-position="top"] .pv-window {
   grid-template: "nav" auto "page" 1fr / 1fr;
 }
 .preview[data-position="bottom"] .pv-window {
   grid-template: "nav" auto "page" 1fr "bar" auto / 1fr;
+}
+
+/* Toolbar at the bottom, with Firefox's own title bar at the top. */
+.preview[data-toolbar="bottom"][data-position="left"] .pv-window {
+  grid-template: "title title" auto "bar page" 1fr "nav nav" auto / auto 1fr;
+}
+.preview[data-toolbar="bottom"][data-position="right"] .pv-window {
+  grid-template: "title title" auto "page bar" 1fr "nav nav" auto / 1fr auto;
+}
+.preview[data-toolbar="bottom"][data-position="top"] .pv-window {
+  grid-template: "title" auto "bar" auto "page" 1fr "nav" auto / 1fr;
+}
+.preview[data-toolbar="bottom"][data-position="bottom"] .pv-window {
+  grid-template: "title" auto "page" 1fr "nav" auto / 1fr;
+}
+
+.pv-titlebar {
+  grid-area: title;
+  display: none;
+  align-items: center;
+  height: 24px;
+  padding: 0 10px;
+  background: var(--pv-window);
+  border-bottom: 1px solid var(--border);
+}
+
+.preview[data-toolbar="bottom"] .pv-titlebar {
+  display: flex;
+}
+
+.preview[data-toolbar="bottom"] .pv-nav .pv-lights {
+  display: none;
 }
 
 .pv-toolbox {
@@ -662,17 +694,25 @@ button:disabled {
 }
 
 /* Toolbar auto-hide, mirroring the generated CSS: the toolbox floats over
-   the page and slides up until only its transparent hover strip remains. */
+   the page and slides out until only its transparent hover strip remains. */
 .preview.tb-autohide .pv-toolbox {
   position: absolute;
   inset: 0 0 auto 0;
   z-index: 6;
-  border-bottom: var(--t) solid var(--zone);
+  border-bottom: var(--tbt) solid var(--zone);
   background-clip: padding-box;
-  translate: 0 calc(var(--t) - 100%);
+  translate: 0 calc(var(--tbt) - 100%);
   transition: translate var(--d) var(--e) var(--cd);
 }
 
+.preview.tb-autohide[data-toolbar="bottom"] .pv-toolbox {
+  inset: auto 0 0 0;
+  border-bottom: 0;
+  border-top: var(--tbt) solid var(--zone);
+  translate: 0 calc(100% - var(--tbt));
+}
+
+/* After the bottom rule, which has the same specificity. */
 .preview.tb-autohide .pv-toolbox:hover,
 .preview.tb-autohide.hold .pv-toolbox {
   translate: 0 0;
@@ -908,6 +948,7 @@ button:disabled {
 
 .preview:is([data-position="top"], [data-position="bottom"]) .pv-tab {
   width: 128px;
+  height: var(--pv-tab-h, 30px);
 }
 
 .pv-tab span {

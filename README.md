@@ -1,8 +1,9 @@
 # Kits Editor for Firefox
 
 Hide Firefox's tab bar and toolbar until you need them, so the page gets the
-whole window. Tabs on any edge, an auto-hiding address bar, and every size,
-color and speed set from a settings page inside Firefox, with a live preview.
+whole window. Tabs on any edge, the address bar on the top or bottom, and
+every size, color and speed set from a settings page inside Firefox, with a
+live preview.
 
 ## Install
 
