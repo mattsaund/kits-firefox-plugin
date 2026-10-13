@@ -128,7 +128,7 @@ test("every variant is well-formed", () => {
 
     // Outside the :root variables block, every declaration must be
     // !important or Firefox's own CSS wins.
-    const withoutVars = bare.replace(/^:root \{[\s\S]*?\n\}/m, "");
+    const withoutVars = bare.replace(/^:root \{[\s\S]*?\n\}/m, "").replace(/^@property [^\n]*\{[\s\S]*?\n\}/m, "");
     for (const line of withoutVars.split("\n")) {
       const t = line.trim();
       if (!t.endsWith(";")) continue;
@@ -140,7 +140,7 @@ test("every variant is well-formed", () => {
 test("right side mirrors the margins onto the start edge", () => {
   const css = generateCss({ ...defaults(), position: "right" });
   assert.ok(css.includes("#sidebar-container[sidebar-positionend] {\n  border-inline-start: var(--ahtb-trigger) solid transparent !important;"));
-  assert.ok(css.includes("margin-inline-start: calc(var(--ahtb-collapsed) - var(--ahtb-expanded) - var(--ahtb-trigger))"));
+  assert.ok(css.includes("margin-inline-start: calc(-1 * var(--ahtb-trigger) - var(--ahtb-open) * (var(--ahtb-expanded) - var(--ahtb-collapsed)))"));
 });
 
 test("push mode keeps the footprint growing instead of cancelling it", () => {
@@ -151,7 +151,7 @@ test("push mode keeps the footprint growing instead of cancelling it", () => {
 test("top: overlay clears the macOS window controls, push does not", () => {
   const overlay = generateCss({ ...defaults(), position: "top" });
   assert.match(overlay, /@media \(-moz-platform: macos\)/);
-  assert.match(overlay, /margin-bottom: calc\(var\(--ahtb-collapsed\) - var\(--ahtb-expanded\)/);
+  assert.ok(overlay.includes("margin-bottom: calc(-1 * var(--ahtb-trigger) - var(--ahtb-open) * (var(--ahtb-expanded) - var(--ahtb-collapsed)))"));
   assert.match(overlay, /--ahtb-expanded: var\(--tabstrip-min-height\);/);
   assert.match(overlay, /#nav-bar > \.titlebar-buttonbox-container/);
 
@@ -169,7 +169,8 @@ test("bottom pins the strip to the window and reserves page space", () => {
   assert.match(css, /position: fixed !important;/);
   assert.match(css, /:root:not\(\[inFullscreen\], \[customizing\]\) #navigator-toolbox \{\n  z-index: 3 !important;/);
   assert.ok(css.includes(":root:not([inFullscreen], [customizing]):has(#TabsToolbar:hover) #browser"));
-  assert.match(css, /margin-bottom: var\(--ahtb-expanded\) !important;/);
+  // Pushing, the page's margin follows the strip's open state.
+  assert.ok(css.includes("margin-bottom: calc(var(--ahtb-collapsed) + var(--ahtb-open) * (var(--ahtb-expanded) - var(--ahtb-collapsed)))"));
 });
 
 test("theme colors emit nothing, custom colors emit variables", () => {
@@ -182,7 +183,7 @@ test("theme colors emit nothing, custom colors emit variables", () => {
   assert.match(custom, /--tab-background-color-selected: #42414d !important;/);
   assert.match(custom, /--tab-border-radius: 6px !important;/);
   assert.match(custom, /box-shadow: inset calc\(-1 \* 2px\) 0 0 0 #5b5b66 !important;/);
-  assert.match(custom, /filter: drop-shadow\(0 0 12px/);
+  assert.ok(custom.includes("filter: drop-shadow(0 0 calc(12px * var(--ahtb-open)) rgba(0, 0, 0, calc(0.45 * var(--ahtb-open))))"));
 });
 
 test("reduced motion block follows the setting", () => {
@@ -227,7 +228,7 @@ test("prefs select the tab layout and sidebar side", () => {
 
 test("toolbar auto-hide slides the toolbox and keeps it open while in use", () => {
   const css = generateCss({ ...defaults(), toolbarAutoHide: true });
-  assert.match(css, /translate: 0 calc\(var\(--ahtb-toolbar-trigger\) - 100%\) !important;/);
+  assert.ok(css.includes("translate: 0 calc((1 - var(--ahtb-open)) * calc(var(--ahtb-toolbar-trigger) - 100%))"));
   assert.ok(css.includes(":root:not([inFullscreen], [customizing]) #navigator-toolbox:hover"));
   assert.ok(css.includes("#navigator-toolbox:has(:is(#nav-bar, #PersonalToolbar, #toolbar-menubar):focus-within)"));
   assert.ok(css.includes('#navigator-toolbox:has(:is(#nav-bar, #PersonalToolbar, #toolbar-menubar) [open]:not([open="false"]))'));
@@ -249,8 +250,9 @@ test("toolbar auto-hide with tabs at the bottom wipes the rows instead of moving
   assert.doesNotMatch(bare, /translate:/);
   assert.ok(css.includes("#navigator-toolbox:hover:not(:has(#TabsToolbar:hover))"));
   assert.match(css, /#navigator-toolbox::before \{\n  content: "" !important;/);
-  assert.match(css, /clip-path: inset\(0 0 100% 0\) !important;/);
-  assert.match(css, /clip-path: inset\(0 0 0 0\) !important;/);
+  // The rows follow the toolbox's open state, which they inherit.
+  assert.ok(css.includes("clip-path: inset(0 0 calc((1 - var(--ahtb-open)) * 100%) 0)"));
+  assert.match(css, /#navigator-toolbox \{\n  position: absolute !important;\n  inset: 0 0 auto 0 !important;\n  z-index: 200 !important;\n  pointer-events: none !important;\n  --ahtb-open: 0 !important;/);
 });
 
 test("address bar and toolbar look", () => {
@@ -313,23 +315,30 @@ test("hold rules keep every auto-hiding piece as it is while the pointer is out 
     [":not(:hover)", ":has(:is(menupopup, panel):hover)", ":has(#window-modal-dialog[open])"].every((c) =>
       css.includes(`${c} ${target}`),
     );
+  // Only the open state is held; the sizes follow it, so a bar caught half
+  // way finishes opening or closing.
+  const held = /--ahtb-open: 0\.001 !important;\n  transition-delay: 86400s(, 0s)* !important;/;
   const vertical = generateCss({ ...defaults(), shadow: true });
   assert.ok(holds(vertical, "#sidebar-container:not([sidebar-positionend])"));
-  assert.match(vertical, /min-width: calc\(var\(--ahtb-collapsed\) \+ var\(--ahtb-trigger\) \+ 0\.01px\) !important;/);
-  assert.match(vertical, /margin-inline-end: calc\(-1 \* var\(--ahtb-trigger\) - 0\.01px\) !important;/);
-  assert.match(vertical, /filter: drop-shadow\(0 0 0\.01px/);
-  assert.match(vertical, /transition-delay: 86400s !important;/);
+  assert.match(vertical, /--ahtb-open: 0\.001 !important;\n  transition-delay: 86400s, 0s, 0s, 0s, 0s, 0s !important;/);
+  assert.ok(vertical.includes("min-width: calc(var(--ahtb-collapsed) + var(--ahtb-trigger) + var(--ahtb-open) * (var(--ahtb-expanded) - var(--ahtb-collapsed)))"));
+  // The state flips after the delays; what follows it animates without one.
+  assert.match(vertical, /transition-property: --ahtb-open, min-width, max-width, margin-inline-start, margin-inline-end, filter !important;\n  transition-duration: 0s, var\(--ahtb-duration\)/);
+  assert.match(vertical, /transition-delay: var\(--ahtb-close-delay\), 0s, 0s, 0s, 0s, 0s !important;/);
+  assert.match(vertical, /--ahtb-open: 1 !important;\n  transition-delay: var\(--ahtb-open-delay\), 0s, 0s, 0s, 0s, 0s !important;/);
 
   const top = generateCss({ ...defaults(), position: "top", toolbarAutoHide: false });
   assert.ok(holds(top, "#TabsToolbar"));
-  assert.match(top, /margin-bottom: calc\(-1 \* var\(--ahtb-trigger\) - 0\.01px\) !important;/);
+  assert.match(top, held);
 
   const toolbar = generateCss({ ...defaults(), toolbarAutoHide: true });
   assert.ok(holds(toolbar, "#navigator-toolbox"));
-  assert.match(toolbar, /translate: 0 calc\(var\(--ahtb-toolbar-trigger\) - 100% \+ 0\.01px\) !important;/);
+  assert.match(toolbar, /--ahtb-open: 0\.001 !important;\n  transition-delay: 86400s, 0s !important;/);
 
   const pushBottom = generateCss({ ...defaults(), position: "bottom", overlay: false });
   assert.ok(holds(pushBottom, "#browser"));
+  // The state is registered, so it can wait out a delay, ahead of the guard.
+  assert.ok(vertical.includes('@property --ahtb-open {\n  syntax: "<number>";\n  inherits: true;\n  initial-value: 0;\n}'));
 });
 
 test("tab thickness sets Firefox's tab height for horizontal tabs only", () => {
@@ -345,7 +354,7 @@ test("toolbar at the bottom moves the toolbox, flips the address bar results and
   assert.ok(!("browser.tabs.inTitlebar" in firefoxPrefs({ toolbarPosition: "top" })));
 
   const hidden = generateCss({ ...defaults(), toolbarPosition: "bottom", bookmarksPosition: "bottom", toolbarAutoHide: true });
-  assert.match(hidden, /translate: 0 calc\(100% - var\(--ahtb-toolbar-trigger\)\) !important;/);
+  assert.ok(hidden.includes("translate: 0 calc((1 - var(--ahtb-open)) * calc(100% - var(--ahtb-toolbar-trigger)))"));
   assert.match(hidden, /border-top: var\(--ahtb-toolbar-trigger\) solid transparent !important;/);
 });
 
@@ -355,7 +364,7 @@ test("tabs on the other edge from the toolbar are a fixed strip; on the same edg
   assert.match(topTabsBottomBar, /#browser \{\n  margin-top: var\(--ahtb-collapsed\) !important;/);
 
   const wiped = generateCss({ ...defaults(), position: "top", toolbarPosition: "bottom", bookmarksPosition: "bottom", toolbarAutoHide: true });
-  assert.match(wiped, /clip-path: inset\(100% 0 0 0\) !important;/);
+  assert.ok(wiped.includes("clip-path: inset(calc((1 - var(--ahtb-open)) * 100%) 0 0 0)"));
   assert.match(wiped, /#navigator-toolbox::before \{[^}]*inset: auto 0 0 0 !important;/);
 
   // Saved before 0.4.1 as "tabs below the toolbar".
@@ -371,7 +380,7 @@ test("tabs on the other edge from the toolbar are a fixed strip; on the same edg
 
   const bottomBoth = generateCss({ ...defaults(), position: "bottom", toolbarPosition: "bottom", bookmarksPosition: "bottom" });
   assert.match(bottomBoth, /position: relative !important;\n  z-index: 10 !important;/);
-  assert.match(bottomBoth, /margin-top: calc\(-1 \* var\(--ahtb-trigger\)\) !important;/);
+  assert.ok(bottomBoth.includes("margin-top: calc(-1 * var(--ahtb-trigger) - var(--ahtb-open) * (var(--ahtb-expanded) - var(--ahtb-collapsed))) !important;"));
   assert.doesNotMatch(bottomBoth, /position: fixed/);
 });
 
@@ -469,7 +478,8 @@ test("pointing at something clickable near an edge lets the pointer through ever
         // A toolbar held open (typing, a menu) takes the pointer back.
         const zone = through("#navigator-toolbox");
         assert.ok(zone > 0, label);
-        assert.ok(css.indexOf("translate: 0 0 !important;\n  pointer-events: auto !important;") > zone, label);
+        const back = css.indexOf("transition-delay: var(--ahtb-open-delay), 0s !important;\n  pointer-events: auto !important;");
+        assert.ok(back > zone, label);
       }
     }
   }
@@ -478,7 +488,8 @@ test("pointing at something clickable near an edge lets the pointer through ever
 test("every rule applies only while the add-on is installed", () => {
   const guard = '@media (-moz-pref("extensions.webextensions.ExtensionStorageIDB.migrated.autohide-tab-bar@kits")) {';
   for (const s of variants()) {
-    const bare = stripComments(generateCss(s)).trim();
+    // Registering the open state styles nothing; it goes ahead of the guard.
+    const bare = stripComments(generateCss(s)).trim().replace(/^@property [^{]*\{[^}]*\}\s*/, "");
     assert.ok(bare.startsWith(guard), `${s.position}: something comes before the guard`);
     // The guard's block closes at the very end, so nothing follows it.
     let depth = 0;
@@ -552,10 +563,10 @@ test("bookmarks bar hiding in the toolbox reaches out of it", () => {
   const css = generateCss({ ...defaults(), bookmarksAutoHide: true });
   // Out of the toolbox's clip and above the page.
   assert.match(css, /#navigator-toolbox \{\n  z-index: 3 !important;\n  overflow: visible !important;/);
-  assert.match(css, /#PersonalToolbar \{\n  box-sizing: border-box !important;\n  min-height: calc\(0px \+ var\(--ahtb-bm-trigger\)\) !important;/);
+  assert.ok(css.includes("#PersonalToolbar {\n  box-sizing: border-box !important;\n  --ahtb-open: 0 !important;\n  min-height: calc(0px + var(--ahtb-bm-trigger) + var(--ahtb-open) * (var(--ahtb-bm-height) - 0px)) !important;"));
   assert.match(css, /border-bottom: var\(--ahtb-bm-trigger\) solid transparent !important;/);
   // Sliding open over the page, which stays put.
-  assert.match(css, /margin-bottom: calc\(0px - var\(--ahtb-bm-height\) - var\(--ahtb-bm-trigger\)\) !important;/);
+  assert.ok(css.includes("margin-bottom: calc(-1 * var(--ahtb-bm-trigger) - var(--ahtb-open) * (var(--ahtb-bm-height) - 0px)) !important;"));
   assert.ok(css.includes(':has(#PersonalToolbar [open]:not([open="false"])) #PersonalToolbar'));
   assert.ok(css.includes(":has(#placesContext :is(menu, menuitem)[_moz-menuactive]) #PersonalToolbar"));
   // Its size, or nothing while Firefox hides the bar.
@@ -576,14 +587,16 @@ test("bars on the other edge are fixed strips, stacked, with the page kept clear
 
   // Both hiding: one group; the inner bar moves out as the outer one opens.
   const group = generateCss({ ...defaults(), position: "bottom", bookmarksPosition: "bottom", bookmarksAutoHide: true, barOrder: "toolbar,tabs,bookmarks" });
-  assert.match(group, /#TabsToolbar \{\n  position: fixed !important;\n  inset-inline: 0 !important;\n  top: auto !important;\n  bottom: 0px !important;/);
+  // The bookmarks bar at the window's edge, the tab strip inside it.
+  assert.match(group, /#PersonalToolbar \{\n  position: fixed !important;\n  inset-inline: 0 !important;\n  top: auto !important;\n  bottom: 0px !important;/);
   assert.ok(group.includes(":has(#TabsToolbar:hover) #PersonalToolbar"));
   assert.ok(group.includes(":has(#PersonalToolbar:hover) #TabsToolbar"));
-  assert.match(group, /bottom: var\(--ahtb-bm-height\) !important;\n  transition-delay: var\(--ahtb-open-delay\) !important;/);
+  // As the group opens, the inner bar moves out by the outer one's growth.
+  assert.ok(group.includes("#TabsToolbar {\n  position: fixed !important;\n  inset-inline: 0 !important;\n  top: auto !important;\n  bottom: calc(0px + var(--ahtb-open) * (var(--ahtb-bm-height) - 0px)) !important;"));
 
   // Pushing the page, it makes room for the open group.
   const push = generateCss({ ...defaults(), position: "bottom", overlay: false, bookmarksPosition: "bottom", bookmarksAutoHide: true, barOrder: "toolbar,tabs,bookmarks" });
-  assert.match(push, /margin-bottom: calc\(var\(--ahtb-bm-height\) \+ var\(--ahtb-expanded\)\) !important;/);
+  assert.ok(push.includes("margin-bottom: calc(var(--ahtb-collapsed) + var(--ahtb-open) * (calc(var(--ahtb-bm-height) + var(--ahtb-expanded)) - var(--ahtb-collapsed))) !important;"));
 });
 
 test("an auto-hiding toolbar with strips on the other edge wipes its rows", () => {

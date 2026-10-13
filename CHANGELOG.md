@@ -3,6 +3,15 @@
 Each version is a `v` tag, with the extension and helper on its
 [release page](https://github.com/mattsaund/kits-firefox-plugin/releases).
 
+## 0.4.2 — 2026-10-13
+
+- **Whipping the pointer to an edge opens the bar all the way.** Pushing
+  against the screen edge counts as leaving Firefox, which used to freeze a
+  bar half open. Now a bar that has started opening finishes, and one that
+  has started closing finishes closing.
+- Shorter README, with pictures.
+- Press **Apply** after updating. No helper update needed.
+
 ## 0.4.1 — 2026-10-12
 
 - **Put the bookmarks bar on the top or bottom**, with the toolbar or on the
