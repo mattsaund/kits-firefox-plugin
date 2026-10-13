@@ -618,3 +618,24 @@ test("bars in the toolbox follow the chosen order", () => {
   const bottom = generateCss({ ...defaults(), toolbarPosition: "bottom", bookmarksPosition: "bottom", barOrder: "bookmarks,toolbar,tabs" });
   assert.match(bottom, /#PersonalToolbar \{\n  order: 1 !important;/);
 });
+
+test("Firefox's line between the bars and the page goes where the page reaches the window's edge", () => {
+  const TOP = "#tabbrowser-tabpanels > :not(.split-view-panel) .browserContainer {\n  border-block-start: none !important;";
+  const SIDE = "#tabbrowser-tabpanels > :not(.split-view-panel) .browserContainer {\n  border-inline: none !important;";
+  // Every bar on the top edge hides.
+  assert.ok(generateCss({ ...defaults(), toolbarAutoHide: true }).includes(TOP));
+  assert.ok(generateCss({ ...defaults(), position: "left", toolbarAutoHide: true }).includes(TOP));
+  // The toolbar stays shown at the top: Firefox's line under it stays.
+  assert.ok(!generateCss(defaults()).includes(TOP));
+  assert.ok(!generateCss({ ...REGULAR_LAYOUT }).includes(TOP));
+  // Nothing on the top edge at all.
+  assert.ok(generateCss({ ...defaults(), position: "bottom", toolbarPosition: "bottom", bookmarksPosition: "bottom" }).includes(TOP));
+  // A bookmarks bar left alone at the top counts only while Firefox shows it.
+  const bookmarksOnTop = { ...defaults(), position: "left", toolbarPosition: "bottom", bookmarksPosition: "top" };
+  assert.ok(generateCss({ ...bookmarksOnTop, bookmarksVisibility: "never" }).includes(TOP));
+  assert.ok(generateCss({ ...bookmarksOnTop, bookmarksVisibility: "newtab" }).includes(`:has(#PersonalToolbar[collapsed]:not([collapsed="false"])) ${TOP}`));
+  // A side tab bar that hides takes its line along, unless a sidebar panel is open.
+  assert.ok(generateCss({ ...defaults(), position: "left" }).includes(`#tabbrowser-tabbox:not([sidebar-panel-open], [ai-window-open]) ${SIDE}`));
+  assert.ok(!generateCss({ ...defaults(), position: "left", autoHide: false }).includes(SIDE));
+  assert.ok(!generateCss({ ...defaults(), position: "top" }).includes(SIDE));
+});

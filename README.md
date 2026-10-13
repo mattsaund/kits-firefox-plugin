@@ -2,9 +2,18 @@
 
 Hide Firefox's bars until you need them. The page gets the whole window.
 
-| Hidden | Point at the edge |
+## Infinite vertical space
+
+With every bar hidden, the page runs from the top of the window to the bottom.
+
+| Search | GitHub |
 | --- | --- |
-| ![The page fills the whole window](docs/hidden.png) | ![The tab bar slides out over the page](docs/open.png) |
+| ![Google image results filling the whole window](docs/space-search.jpg) | ![A GitHub profile filling the whole window](docs/space-github.jpg) |
+
+Point at the top and the tabs and toolbar slide in over the page (ignored when
+going to the search bar):
+
+![The tabs and toolbar slid in over the search results](docs/space-search-open.jpg)
 
 ## What it does
 
@@ -14,17 +23,9 @@ Hide Firefox's bars until you need them. The page gets the whole window.
 - Sizes, colors and speed, set inside Firefox with a live preview.
 - Optional: links near an edge stay clickable.
 
-## Infinite vertical space
-
-With every bar hidden, the page runs from the top of the window to the bottom.
-
-| Search | GitHub |
+| Hidden | Point at the edge |
 | --- | --- |
-| ![Google image results filling the whole window](docs/space-search.jpg) | ![A GitHub profile filling the whole window](docs/space-github.jpg) |
-
-Point at the top and the tabs and toolbar slide in over the page:
-
-![The tabs and toolbar slid in over the search results](docs/space-search-open.jpg)
+| ![The page fills the whole window](docs/hidden.png) | ![The tab bar slides out over the page](docs/open.png) |
 
 ## Install
 

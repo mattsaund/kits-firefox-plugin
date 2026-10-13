@@ -3,6 +3,19 @@
 Each version is a `v` tag, with the extension and helper on its
 [release page](https://github.com/mattsaund/kits-firefox-plugin/releases).
 
+## 0.4.4 — 2026-10-13
+
+- **Passing over a link on the way to the edge no longer slows the bar
+  down.** With **Let clicks through to the page** on, heading past a link or
+  button for the bar (like GitHub's Projects or Wiki tabs) kept the bar shut
+  for about a second. It opens right away now. Overshooting something by the
+  edge, like a profile picture, still keeps the bar out of the way.
+- **No more thin dark line along the top of the window** with the bars hidden
+  there. It was Firefox's own line between its bars and the page. The same
+  goes for the line beside a hidden side tab bar.
+- The README opens with screenshots of the bars hidden and open.
+- Press **Apply** after updating. No helper update needed.
+
 ## 0.4.3 — 2026-10-13
 
 - **Fixed: the toolbar shook over the window buttons** (close, minimize,

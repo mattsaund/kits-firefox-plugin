@@ -81,6 +81,10 @@ const PAGE_WANTS_POINTER = `:has(${PAGE_ACTION})`;
 // when the add-on is removed. Prefs load before the first window, so rules
 // guarded by it are in place from the first paint, and removing the add-on
 // switches them off at once, without a restart.
+// The bookmarks bar while Firefox hides it ("Only on new tab", "Never"). Older
+// versions mark it [collapsed="true"], and [collapsed="false"] when shown.
+const BOOKMARKS_COLLAPSED = '#PersonalToolbar[collapsed]:not([collapsed="false"])';
+
 const INSTALLED_PREF = "extensions.webextensions.ExtensionStorageIDB.migrated.autohide-tab-bar@kits";
 
 /** The full stylesheet for a settings object. */
@@ -108,6 +112,7 @@ function rules(s) {
   blocks.push(...toolbarRules(s));
   blocks.push(...urlbarRules(s));
   blocks.push(...bookmarksRules(s));
+  blocks.push(...pageEdgeRules(s));
   if (s.reducedMotion && (s.autoHide || s.toolbarAutoHide || s.bookmarksAutoHide)) blocks.push(reducedMotionRule(s));
   blocks.push(`/* The signal from "Let clicks through to the page" (see PAGE_ACTION); never shown. */
 ${rule(PAGE_ACTION, ["display: none"])}`);
@@ -150,7 +155,7 @@ function variables(s) {
 /* While Firefox hides the bookmarks bar ("Only on new tab", "Never") it takes
    no room and has no hover zone. Firefox marks it [collapsed] (older versions
    with "true", and "false" when shown). */
-${rule(':root:has(#PersonalToolbar[collapsed]:not([collapsed="false"]))', ["--ahtb-bm-height: 0px", "--ahtb-bm-trigger: 0px"])}`;
+${rule(`:root:has(${BOOKMARKS_COLLAPSED})`, ["--ahtb-bm-height: 0px", "--ahtb-bm-trigger: 0px"])}`;
 }
 
 /** The bookmarks bar's height: its bookmarks plus Firefox's 2px margin around them. */
@@ -1010,6 +1015,43 @@ function bookmarksRules(s) {
 ${rule(`${ITEM} > .toolbarbutton-text`, ["display: none"])}
 
 ${rule(`${ITEM} > .toolbarbutton-icon`, ["margin-inline-end: 0"])}`);
+  }
+  return blocks;
+}
+
+// ---------------------------------------------------------------------------
+// The page's edges
+// ---------------------------------------------------------------------------
+
+/**
+ * Firefox draws a thin line between its bars and the page, rounding the
+ * corner beside a sidebar. Where the bars hide, the page reaches the window's
+ * edge and the line would stay there on its own, so it goes, as it does in
+ * Firefox's full screen.
+ */
+function pageEdgeRules(s) {
+  const L = layout(s);
+  // Firefox's own selector: a page in split view has a frame of its own.
+  const PAGE = "#tabbrowser-tabpanels > :not(.split-view-panel) .browserContainer";
+  const blocks = [];
+
+  // The top edge is clear when no bar there stays shown, counting a bookmarks
+  // bar that is shown only while Firefox isn't hiding it.
+  const shown = L.stacks.top.filter((bar) => !L.hiding[bar] && !(bar === "bookmarks" && s.bookmarksVisibility === "never"));
+  const topClear = !shown.length ? HGUARD : shown.join() === "bookmarks" ? `${HGUARD}:has(${BOOKMARKS_COLLAPSED})` : null;
+  if (topClear) {
+    blocks.push(`/* The page reaches the top of the window: no line above it. */
+${rule(`${topClear} ${PAGE}`, ["border-block-start: none", "border-start-start-radius: 0", "border-start-end-radius: 0"])}`);
+  }
+
+  // A sidebar panel (bookmarks, history) is outside the tab bar and stays.
+  if (L.vertical && s.autoHide) {
+    blocks.push(`/* The page reaches the side of the window: no line beside it. */
+${rule(`${HGUARD} #tabbrowser-tabbox:not([sidebar-panel-open], [ai-window-open]) ${PAGE}`, [
+  "border-inline: none",
+  "border-start-start-radius: 0",
+  "border-start-end-radius: 0",
+])}`);
   }
   return blocks;
 }

@@ -29,12 +29,16 @@
   // Overshooting toward the edge, the pointer may stray this far to either side
   // of the clickable thing it came from and still count as heading for it. (px)
   const SLACK = 12;
+  // ...and go this far past it toward the edge. Further than that, it is
+  // heading for the bar instead, unless the thing is this close to the edge. (px)
+  const OVERSHOOT = 24;
   // After the pointer moves off a clickable thing, the hover zones stay open to
   // the page this long, so crossing a gap between two links doesn't open the bar. (ms)
   const GRACE = 250;
-  // After the pointer leaves the page this long, the hover zones come back. The
-  // wait covers overshooting past the window edge (on macOS, into the menu bar
-  // above a maximized window) and coming straight back. (ms)
+  // After the pointer leaves the page past a clickable thing by the edge, the
+  // hover zones come back this long after. The wait covers overshooting past
+  // the window edge (on macOS, into the menu bar above a maximized window) and
+  // coming straight back. (ms)
   const AWAY = 800;
   // Resting in a hover zone this long, off anything clickable, opens the bar
   // after all. (ms)
@@ -101,15 +105,28 @@
     return [innerWidth - 1 - depth, y];
   }
 
-  /** Whether the pointer is between a clickable thing and the edge it is near. */
-  function inLane({ edge, rect }, x, y) {
+  /** How deep a box reaches into the page from an edge of the window. */
+  function boxReach(edge, r) {
+    return boxDistance(edge, r) + (edge === "top" || edge === "bottom" ? r.height : r.width);
+  }
+
+  /**
+   * Where the pointer is next to a clickable thing near an edge: on it, just
+   * past it toward the edge (all the way, for a thing by the edge), or slightly
+   * beside or below it ("slack"), or else past it toward the edge, heading for
+   * the bar ("past"), or somewhere else (null).
+   */
+  function laneAt({ edge, rect }, x, y) {
     const r = rect();
-    if (edge === "top" || edge === "bottom") {
-      const across = x >= r.left - SLACK && x <= r.right + SLACK;
-      return across && (edge === "top" ? y <= r.bottom + SLACK : y >= r.top - SLACK);
-    }
-    const across = y >= r.top - SLACK && y <= r.bottom + SLACK;
-    return across && (edge === "left" ? x <= r.right + SLACK : x >= r.left - SLACK);
+    const across = edge === "top" || edge === "bottom" ? x >= r.left - SLACK && x <= r.right + SLACK : y >= r.top - SLACK && y <= r.bottom + SLACK;
+    const depth = distance(edge, x, y);
+    if (!across || depth > boxReach(edge, r) + SLACK) return null;
+    return depth >= boxDistance(edge, r) - OVERSHOOT ? "in" : "past";
+  }
+
+  /** Whether overshooting a clickable thing can carry the pointer right up to its edge. */
+  function byTheEdge({ edge, rect }) {
+    return boxDistance(edge, rect()) < OVERSHOOT;
   }
 
   // ---------------------------------------------------------------------------
@@ -234,7 +251,8 @@
       }
     }
     // Overshooting from it toward the edge.
-    if (lane && inLane(lane, x, y)) {
+    const fromLane = lane && laneAt(lane, x, y);
+    if (fromLane === "in") {
       setHold(true);
       return;
     }
@@ -249,7 +267,9 @@
         return;
       }
     }
-    setHold(false, GRACE);
+    // Gone well past it toward the edge, the pointer is after the bar: let it
+    // through at once. Off to the side, it may be crossing to the next link.
+    setHold(false, fromLane === "past" ? 0 : GRACE);
   }
 
   // ---------------------------------------------------------------------------
@@ -272,7 +292,8 @@
   function onPointerOut(e) {
     if (e.relatedTarget && !/^(iframe|frame|object|embed)$/i.test(e.relatedTarget.localName)) return;
     pointer = null;
-    setHold(false, e.relatedTarget ? GRACE : AWAY);
+    if (e.relatedTarget) setHold(false, GRACE);
+    else setHold(false, lane && byTheEdge(lane) ? AWAY : 0);
   }
 
   function stop() {
