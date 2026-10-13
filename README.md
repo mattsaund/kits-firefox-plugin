@@ -14,6 +14,14 @@ Hide Firefox's bars until you need them. The page gets the whole window.
 - Sizes, colors and speed, set inside Firefox with a live preview.
 - Optional: links near an edge stay clickable.
 
+## Infinite vertical space
+
+With every bar hidden, the page runs from the top of the window to the bottom.
+
+| Search | GitHub |
+| --- | --- |
+| ![Google image results filling the whole window](docs/space-search.jpg) | ![A GitHub profile filling the whole window](docs/space-github.jpg) |
+
 ## Install
 
 **1. Helper** (needs Python 3.8+)
