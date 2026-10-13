@@ -30,7 +30,7 @@ import sys
 import tempfile
 import time
 
-VERSION = "0.4.2"
+VERSION = "0.4.3"
 
 CSS_FILENAME = "autohide-tab-bar.css"
 BACKUP_SUFFIX = ".ahtb-backup"

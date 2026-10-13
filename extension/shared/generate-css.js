@@ -44,8 +44,6 @@ const HGUARD = ":root:not([inFullscreen], [customizing])";
 const MAC_WINDOW_CONTROLS = "76px";
 const WINDOWS_WINDOW_CONTROLS = "138px";
 
-// The shadow of an open bar, fading in with its open state (see OPEN_STATE).
-const SHADOW = "filter: drop-shadow(0 0 calc(12px * var(--ahtb-open)) rgba(0, 0, 0, calc(0.45 * var(--ahtb-open))))";
 
 // The theme's toolbox color can be translucent (it is on macOS), which would
 // let the page show through anything overlaid on it. Layer it over an opaque
@@ -55,18 +53,20 @@ const OPAQUE_THEME_BACKGROUND = [
   "background-image: image(var(--toolbox-background-color))",
 ];
 
-// Every element that hides keeps its state in --ahtb-open: 0 closed, 1 open.
-// It flips at once, after the close or open delay, and the element's sizes,
-// offsets and shadow are written in terms of it, so they follow with the
-// animation. Registered, so it can wait out a delay; inherited, so a
-// toolbox's rows can follow the toolbox. The hold rules freeze only the flip
-// (see holdRule), never a size, so a bar caught half way finishes what it
-// was doing.
-const OPEN_STATE = `@property --ahtb-open {
-  syntax: "<number>";
-  inherits: true;
-  initial-value: 0;
-}`;
+// How open each element that hides is, from 0 to 1. Two registered
+// properties carry it, and the element's sizes, offsets and shadow are written
+// in terms of OPENNESS, with no transitions of their own, so they follow it
+// every frame. Normally both properties move together: to 1 after the open
+// delay, to 0 after the close delay. Only the hold rules point them different
+// ways (see holdRule). Not inherited, so animating a bar doesn't restyle every
+// tab inside it.
+const OPEN_STATE = ["--ahtb-open", "--ahtb-reopen"]
+  .map((name) => `@property ${name} {\n  syntax: "<number>";\n  inherits: false;\n  initial-value: 0;\n}`)
+  .join("\n\n");
+const OPENNESS = "max(var(--ahtb-open), var(--ahtb-reopen))";
+
+// The shadow of an open bar, fading in as it opens.
+const SHADOW = `filter: drop-shadow(0 0 calc(12px * ${OPENNESS}) rgba(0, 0, 0, calc(0.45 * ${OPENNESS})))`;
 
 // "Let clicks through to the page": while the pointer is on something
 // clickable near an edge, the extension's page script has the background
@@ -88,7 +88,7 @@ export function generateCss(input) {
   const s = sanitize(input);
   return `${header(s)}
 
-/* Each hiding bar's open state (see OPEN_STATE). Registering it styles nothing. */
+/* How open each hiding bar is (see OPEN_STATE). Registering it styles nothing. */
 ${OPEN_STATE}
 
 /* Everything below applies only while ${PRODUCT_NAME} is installed (see INSTALLED_PREF). */
@@ -166,27 +166,23 @@ function rule(selectors, declarations) {
 }
 
 /**
- * The transitions of an element that hides: its open state flips after
- * `delay` (the close delay unless the open rule swaps in the open delay), and
- * the listed properties, written in terms of it, follow with the animation.
+ * The closed state of an element that hides, and the transitions that carry
+ * its openness: after the close delay; the open rule swaps in the open delay.
  */
-function stateTransition(properties) {
+function stateTransition() {
   return [
-    `transition-property: ${["--ahtb-open", ...properties].join(", ")}`,
-    `transition-duration: ${["0s", ...properties.map(() => "var(--ahtb-duration)")].join(", ")}`,
-    `transition-timing-function: ${["linear", ...properties.map(() => "var(--ahtb-easing)")].join(", ")}`,
-    stateDelay(properties, "var(--ahtb-close-delay)"),
+    "--ahtb-open: 0",
+    "--ahtb-reopen: 0",
+    "transition-property: --ahtb-open, --ahtb-reopen",
+    "transition-duration: var(--ahtb-duration)",
+    "transition-timing-function: var(--ahtb-easing)",
+    "transition-delay: var(--ahtb-close-delay)",
   ];
 }
 
-/** The transition delays for an element that hides: the flip's, and none for what follows it. */
-function stateDelay(properties, delay) {
-  return `transition-delay: ${[delay, ...properties.map(() => "0s")].join(", ")}`;
-}
-
 /** The open state of an element that hides, reached after the open delay. */
-function openState(properties) {
-  return ["--ahtb-open: 1", stateDelay(properties, "var(--ahtb-open-delay)")];
+function openState() {
+  return ["--ahtb-open: 1", "--ahtb-reopen: 1", "transition-delay: var(--ahtb-open-delay)"];
 }
 
 /** Fixes a horizontal tab strip at the given height. */
@@ -206,24 +202,27 @@ function fixedHeight(selector, height) {
  *     tab group editor, a bookmark folder.
  *   - While a Firefox dialog is open, such as Edit Bookmark.
  *
- * CSS can't remember state, so a transition does: the held open state is a
- * value that is neither closed nor open, reached with a one-day delay. Until
- * then the state stays as it was: an open bar stays open, a closed one closed,
- * and one that has started opening or closing finishes, since its sizes
- * follow the state rather than being frozen themselves. When the pointer comes
- * back, the state's target changes again, which replaces the pending
- * transition, so the bar closes as usual over the page or stays open over the
- * bar.
+ * CSS can't remember state, so transitions do. While the pointer is out of
+ * sight, --ahtb-open is pointed at 1 and --ahtb-reopen at 0.5, both a day
+ * away. A transition already heading for the same end carries on, so an open
+ * bar stays open and one that has started opening finishes; anything else
+ * waits out the day, so a closed bar stays closed and --ahtb-reopen stays as
+ * it is. Back over the page, both head for 0 again. Back on the bar, both head
+ * for 1, and --ahtb-reopen opens it even if --ahtb-open is still waiting out
+ * its day. (A bar caught closing stops where it is until the pointer is back.)
+ *
+ * The sizes follow the openness rather than transitioning themselves: a
+ * transition aims at the new target at once, which would close the bar the
+ * moment the pointer reached the window buttons, and skip the close delay.
  *
  * The selectors are less specific than the bar's own non-hover open
  * conditions (dragging a tab, an active menu item, typing in the address
  * bar), so those still win.
  */
-function holdRule(root, targets, properties) {
-  return rule(holdSelectors(root, targets), ["--ahtb-open: 0.001", stateDelay(properties, "86400s")]);
+function holdRule(root, targets) {
+  return rule(holdSelectors(root, targets), ["--ahtb-open: 1", "--ahtb-reopen: 0.5", "transition-delay: 86400s"]);
 }
 
-/** The selectors for "the pointer is out of Firefox's sight" (see holdRule). */
 function holdSelectors(root, targets) {
   const conditions = [":not(:hover)", ":has(:is(menupopup, panel):hover)", ":has(#window-modal-dialog[open])"];
   return [targets].flat().flatMap((target) => conditions.map((c) => `${root}${c} ${target}`));
@@ -334,7 +333,7 @@ ${rule("#sidebar-launcher-splitter", ["display: none"])}`);
   const props = ["min-width", "max-width", "margin-inline-start", "margin-inline-end", ...(s.shadow ? ["filter"] : [])];
   // Open, the bar grows by this much; sliding over the page, its margin hands
   // the growth back so the page stays put.
-  const growth = "var(--ahtb-open) * (var(--ahtb-expanded) - var(--ahtb-collapsed))";
+  const growth = `${OPENNESS} * (var(--ahtb-expanded) - var(--ahtb-collapsed))`;
   const width = `calc(var(--ahtb-collapsed) + var(--ahtb-trigger) + ${growth})`;
 
   blocks.push(`/* Border box = collapsed + trigger, plus the growth while open; the trigger
@@ -343,7 +342,6 @@ ${rule("#sidebar-launcher-splitter", ["display: none"])}`);
    margin returns the trigger's space to the page. */
 ${rule(T, [
   "box-sizing: border-box",
-  "--ahtb-open: 0",
   `min-width: ${width}`,
   `max-width: ${width}`,
   "overflow: hidden",
@@ -351,7 +349,7 @@ ${rule(T, [
   "z-index: 100",
   "background-clip: padding-box",
   ...(s.shadow ? [SHADOW] : []),
-  ...stateTransition(props),
+  ...stateTransition(),
 ])}`);
 
   for (const { sel, inner } of sides) {
@@ -373,12 +371,11 @@ ${rule(`:root${PAGE_WANTS_POINTER} ${T}`, ["pointer-events: none"])}`);
 ${holdRule(
   ":root",
   sides.map(({ sel }) => sel),
-  props,
 )}`);
 
   const open = sides.map(({ sel }) => expandedSelectors({ target: sel, menus }));
   blocks.push(`/* Open. */
-${rule(open.flat(), openState(props))}`);
+${rule(open.flat(), openState())}`);
 
   return blocks;
 }
@@ -557,10 +554,10 @@ function toolboxStrip(s, L, bar) {
   const innermost = group.at(-1) === bar;
   const side = pageSide(L.toolbarEdge);
   const shadow = s.shadow && m.shadow;
-  const height = `calc(${m.collapsed}${innermost ? ` + ${m.trigger}` : ""} + var(--ahtb-open) * (${m.expanded} - ${m.collapsed}))`;
+  const height = `calc(${m.collapsed}${innermost ? ` + ${m.trigger}` : ""} + ${OPENNESS} * (${m.expanded} - ${m.collapsed}))`;
   // Sliding over the page, the innermost bar's margin cancels the whole
   // group's growth, so the page beyond stays where it was.
-  const groupGrowth = `var(--ahtb-open) * (${sum(group.map((b) => STRIPS[b].expanded))} - ${sum(group.map((b) => STRIPS[b].collapsed))})`;
+  const groupGrowth = `${OPENNESS} * (${sum(group.map((b) => STRIPS[b].expanded))} - ${sum(group.map((b) => STRIPS[b].collapsed))})`;
   const margin = s.overlay ? `calc(-1 * ${m.trigger} - ${groupGrowth})` : `calc(-1 * ${m.trigger})`;
   const props = ["min-height", "max-height", ...(innermost ? [`margin-${side}`] : []), ...(shadow ? ["filter"] : [])];
 
@@ -570,7 +567,6 @@ function toolboxStrip(s, L, bar) {
    over the bars and the page beyond it. */
 ${rule(`${HGUARD} ${m.sel}`, [
   "box-sizing: border-box",
-  "--ahtb-open: 0",
   `min-height: ${height}`,
   `max-height: ${height}`,
   ...(innermost ? [`border-${side}: ${m.trigger} solid transparent`, "background-clip: padding-box", `margin-${side}: ${margin}`] : []),
@@ -578,14 +574,14 @@ ${rule(`${HGUARD} ${m.sel}`, [
   "position: relative",
   "z-index: 10",
   ...(shadow ? [SHADOW] : []),
-  ...stateTransition(props),
+  ...stateTransition(),
 ])}`,
     `/* Hold the open state while the pointer is out of Firefox's sight (see holdRule). */
-${holdRule(HGUARD, m.sel, props)}`,
+${holdRule(HGUARD, m.sel)}`,
     `/* Open. */
 ${rule(
   groupOpen(group).map((c) => `${HGUARD}${c} ${m.sel}`),
-  openState(props),
+  openState(),
 )}`,
   ];
 }
@@ -607,7 +603,7 @@ function fixedStrips(s, L) {
   const openSize = (bar) => (group.includes(bar) ? STRIPS[bar].expanded : restSize(bar));
   const offset = (i, opened) => sum(bars.slice(0, i).map(opened ? openSize : restSize));
   /** A length that goes from `closed` to `opened` with the open state. */
-  const follow = (closed, opened) => (closed === opened ? closed : `calc(${closed} + var(--ahtb-open) * (${opened} - ${closed}))`);
+  const follow = (closed, opened) => (closed === opened ? closed : `calc(${closed} + ${OPENNESS} * (${opened} - ${closed}))`);
   const blocks = [];
 
   bars.forEach((bar, i) => {
@@ -620,7 +616,7 @@ function fixedStrips(s, L) {
     const openOffset = hides || !s.overlay ? offset(i, true) : closedOffset;
     const moves = group.length > 0 && openOffset !== closedOffset;
     const trigger = innermost ? ` + ${m.trigger}` : "";
-    const height = hides ? `calc(${m.collapsed}${trigger} + var(--ahtb-open) * (${m.expanded} - ${m.collapsed}))` : m.expanded;
+    const height = hides ? `calc(${m.collapsed}${trigger} + ${OPENNESS} * (${m.expanded} - ${m.collapsed}))` : m.expanded;
     const props = [...(hides ? ["min-height", "max-height"] : []), ...(moves ? [edge] : []), ...(shadow ? ["filter"] : [])];
 
     blocks.push(`/* ${m.name}: a fixed strip on the ${edge} edge${i ? `, inside the ${STRIPS[bars[i - 1]].name.toLowerCase()}` : ""}. */
@@ -631,7 +627,6 @@ ${rule(`${HGUARD} ${m.sel}`, [
   `${edge}: ${follow(closedOffset, openOffset)}`,
   "margin: 0",
   "box-sizing: border-box",
-  ...(props.length ? ["--ahtb-open: 0"] : []),
   `min-height: ${height}`,
   `max-height: ${height}`,
   // Hiding bars cover the ones they open over.
@@ -639,15 +634,15 @@ ${rule(`${HGUARD} ${m.sel}`, [
   ...(innermost ? [`border-${side}: ${m.trigger} solid transparent`, "background-clip: padding-box"] : []),
   ...(hides ? ["overflow: hidden"] : []),
   ...(shadow ? [SHADOW] : []),
-  ...(props.length ? stateTransition(props) : []),
+  ...(props.length ? stateTransition() : []),
 ])}`);
 
     if (!props.length) return;
-    blocks.push(holdRule(HGUARD, m.sel, props));
+    blocks.push(holdRule(HGUARD, m.sel));
     blocks.push(
       rule(
         open.map((c) => `${c} ${m.sel}`),
-        openState(props),
+        openState(),
       ),
     );
   });
@@ -658,16 +653,15 @@ ${rule(`${HGUARD} ${m.sel}`, [
   const pushes = !s.overlay && group.length > 0;
   blocks.push(`/* The page makes room for the strips. */
 ${rule(`${HGUARD} #browser`, [
-  ...(pushes ? ["--ahtb-open: 0"] : []),
   `${pageMargin}: ${pushes ? follow(closedTotal, sum(bars.map(openSize))) : closedTotal}`,
-  ...(pushes ? stateTransition([pageMargin]) : []),
+  ...(pushes ? stateTransition() : []),
 ])}`);
   if (pushes) {
-    blocks.push(holdRule(HGUARD, "#browser", [pageMargin]));
+    blocks.push(holdRule(HGUARD, "#browser"));
     blocks.push(
       rule(
         open.map((c) => `${c} #browser`),
-        openState([pageMargin]),
+        openState(),
       ),
     );
   }
@@ -812,13 +806,13 @@ ${rule(TB, ["order: 1"])}`);
     const ROWS = `#navigator-toolbox > ${rows}`;
     // The tab strip in a wiped toolbox keeps its own background.
     const PAINTED = `#navigator-toolbox > :is(${L.rows.filter((row) => row !== "#TabsToolbar").join(", ")})`;
-    // The rows follow the toolbox's open state, which they inherit.
-    const cut = "calc((1 - var(--ahtb-open)) * 100%)";
+    // The rows open and close themselves, on the toolbox's conditions.
+    const cut = `calc((1 - ${OPENNESS}) * 100%)`;
     const clip = bottom ? `inset(${cut} 0 0 0)` : `inset(0 0 ${cut} 0)`;
     blocks.push(`/* Toolbar auto-hide, with strips on the other edge. The toolbox floats over
    the page, transparent to the pointer; an invisible strip along the window
    edge catches the pointer and the rows are revealed with clip-path. */
-${rule(TB, ["position: absolute", atEdge, "z-index: 200", "pointer-events: none", "--ahtb-open: 0", ...stateTransition([])])}
+${rule(TB, ["position: absolute", atEdge, "z-index: 200", "pointer-events: none"])}
 
 ${rule(
   L.fixedSels.map((sel) => `${HGUARD} ${sel}`),
@@ -836,21 +830,15 @@ ${rule(`${TB}::before`, [
 
 ${rule(`${HGUARD} ${PAINTED}`, background)}
 
-${rule(`${HGUARD} ${ROWS}`, [
-  `clip-path: ${clip}`,
-  "pointer-events: none",
-  "transition: clip-path var(--ahtb-duration) var(--ahtb-easing)",
-])}
+${rule(`${HGUARD} ${ROWS}`, [`clip-path: ${clip}`, "pointer-events: none", ...stateTransition()])}
 
-${holdRule(HGUARD, "#navigator-toolbox", [])}
+${holdRule(HGUARD, ROWS)}
 
 ${rule(holdSelectors(HGUARD, ROWS), ["pointer-events: auto"])}
 
-${rule(open, openState([]))}
-
 ${rule(
   open.map((sel) => `${sel} > ${rows}`),
-  ["pointer-events: auto"],
+  [...openState(), "pointer-events: auto"],
 )}
 
 ${rule(
@@ -900,14 +888,13 @@ ${rule(TB, [
   `border-${bottom ? "top" : "bottom"}: ${trigger} solid transparent`,
   "background-clip: padding-box",
   ...background,
-  "--ahtb-open: 0",
-  `translate: 0 calc((1 - var(--ahtb-open)) * ${away})`,
-  ...stateTransition(["translate"]),
+  `translate: 0 calc((1 - ${OPENNESS}) * ${away})`,
+  ...stateTransition(),
 ])}
 
-${holdRule(HGUARD, "#navigator-toolbox", ["translate"])}
+${holdRule(HGUARD, "#navigator-toolbox")}
 
-${rule(open, [...openState(["translate"]), "pointer-events: auto"])}`);
+${rule(open, [...openState(), "pointer-events: auto"])}`);
   return blocks;
 }
 

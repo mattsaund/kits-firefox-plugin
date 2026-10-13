@@ -3,6 +3,14 @@
 Each version is a `v` tag, with the extension and helper on its
 [release page](https://github.com/mattsaund/kits-firefox-plugin/releases).
 
+## 0.4.3 — 2026-10-13
+
+- **Fixed: the toolbar shook over the window buttons** (close, minimize,
+  zoom) on macOS, making them hard to click. It stays still now.
+- The close and open delays work again; 0.4.2 skipped them.
+- A bar whipped open at the screen edge still opens all the way.
+- Press **Apply** after updating. No helper update needed.
+
 ## 0.4.2 — 2026-10-13
 
 - **Whipping the pointer to an edge opens the bar all the way.** Pushing
