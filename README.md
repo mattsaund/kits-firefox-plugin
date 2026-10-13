@@ -22,6 +22,10 @@ With every bar hidden, the page runs from the top of the window to the bottom.
 | --- | --- |
 | ![Google image results filling the whole window](docs/space-search.jpg) | ![A GitHub profile filling the whole window](docs/space-github.jpg) |
 
+Point at the top and the tabs and toolbar slide in over the page:
+
+![The tabs and toolbar slid in over the search results](docs/space-search-open.jpg)
+
 ## Install
 
 **1. Helper** (needs Python 3.8+)
