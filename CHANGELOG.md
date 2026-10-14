@@ -3,6 +3,20 @@
 Each version is a `v` tag, with the extension and helper on its
 [release page](https://github.com/mattsaund/kits-firefox-plugin/releases).
 
+## 0.4.5 — 2026-10-13
+
+- **Fixed: bars stuck open.** Firefox's tab previews (the card that shows
+  when you rest on a tab) can leave a tab marked as if a popup were open on
+  it. Kits kept the bars open for that mark until Firefox restarted. A tab's
+  mark no longer counts. The tab group and tab note editors still keep the
+  bars open while they show.
+- **The page right beside an open bar can be clicked.** The hover zone used
+  to stay along the edge of an open bar and catch clicks there, like a
+  button just under the toolbar. Now it gives way as the bar opens, so an
+  open bar only takes the pointer on itself. A zone deeper than the bar
+  keeps the rest.
+- Press **Apply** after updating. No helper update needed.
+
 ## 0.4.4 — 2026-10-13
 
 - **Passing over a link on the way to the edge no longer slows the bar

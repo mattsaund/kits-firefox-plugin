@@ -65,6 +65,23 @@ const OPEN_STATE = ["--ahtb-open", "--ahtb-reopen"]
   .join("\n\n");
 const OPENNESS = "max(var(--ahtb-open), var(--ahtb-reopen))";
 
+/**
+ * A hover zone's depth: `size` while the bar is closed, giving up whatever
+ * part of it the bar covers as it opens by `growth`. Open, the bar takes the
+ * pointer only on itself, so the page right beside it can be clicked; a zone
+ * deeper than the bar grows keeps the rest.
+ */
+function zoneDepth(size, growth) {
+  return `calc(${size} - ${OPENNESS} * clamp(0px, ${growth}, ${size}))`;
+}
+
+// Firefox panels anchored to a tab (its hover preview, tab notes) mark the tab
+// [open]. The hover preview moves from tab to tab while open, and on closing
+// Firefox clears the mark from the last tab only, so the first keeps it for
+// good. A tab's [open] therefore says nothing; the panels people use count
+// while they show.
+const TAB_PANELS_OPEN = ":has(:is(#tab-group-editor, #tab-note-menu) panel[panelopen])";
+
 // The shadow of an open bar, fading in as it opens.
 const SHADOW = `filter: drop-shadow(0 0 calc(12px * ${OPENNESS}) rgba(0, 0, 0, calc(0.45 * ${OPENNESS})))`;
 
@@ -249,8 +266,8 @@ function expandedSelectors({ root = ":root", target, menus, extraSelf = [] }) {
   ];
   const menuList = menus.join(", ");
   const outside = [
-    // The tab group editor <panel> marks itself [panelopen] while shown.
-    ":has(#tab-group-editor panel[panelopen])",
+    // The tab group and tab note editors, while shown (see TAB_PANELS_OPEN).
+    TAB_PANELS_OPEN,
     // <menupopup> exposes no open state, but Gecko puts [_moz-menuactive] on
     // the highlighted item of an open menu; submenus are nested in the DOM so
     // they are covered too. The hold rules cover the moments in between.
@@ -339,7 +356,8 @@ ${rule("#sidebar-launcher-splitter", ["display: none"])}`);
   // Open, the bar grows by this much; sliding over the page, its margin hands
   // the growth back so the page stays put.
   const growth = `${OPENNESS} * (var(--ahtb-expanded) - var(--ahtb-collapsed))`;
-  const width = `calc(var(--ahtb-collapsed) + var(--ahtb-trigger) + ${growth})`;
+  const zone = zoneDepth("var(--ahtb-trigger)", "var(--ahtb-expanded) - var(--ahtb-collapsed)");
+  const width = `calc(var(--ahtb-collapsed) + ${zone} + ${growth})`;
 
   blocks.push(`/* Border box = collapsed + trigger, plus the growth while open; the trigger
    is a transparent border (still a hit target) and overflow clips to the
@@ -360,8 +378,8 @@ ${rule(T, [
   for (const { sel, inner } of sides) {
     blocks.push(
       rule(sel, [
-        `border-inline-${inner}: var(--ahtb-trigger) solid transparent`,
-        `margin-inline-${inner}: ${s.overlay ? `calc(-1 * var(--ahtb-trigger) - ${growth})` : "calc(-1 * var(--ahtb-trigger))"}`,
+        `border-inline-${inner}: ${zone} solid transparent`,
+        `margin-inline-${inner}: ${s.overlay ? `calc(-1 * ${zone} - ${growth})` : `calc(-1 * ${zone})`}`,
       ]),
     );
   }
@@ -408,7 +426,7 @@ const STRIPS = {
       ":has(tab-group[movingtabgroup])",
       // Toolbar buttons in the strip (e.g. "List all tabs") while their panel shows.
       ":has(#TabsToolbar toolbarbutton[open])",
-      ":has(#tab-group-editor panel[panelopen])",
+      TAB_PANELS_OPEN,
       `:has(:is(${TAB_MENUS.join(", ")}) :is(menu, menuitem)[_moz-menuactive])`,
       `:has(:is(${TAB_MENUS.join(", ")}):hover)`,
     ],
@@ -445,6 +463,11 @@ function sum(lengths) {
   const parts = lengths.filter((length) => length !== "0px");
   if (!parts.length) return "0px";
   return parts.length === 1 ? parts[0] : `calc(${parts.join(" + ")})`;
+}
+
+/** How much a group of bars grows by, opening. */
+function groupSpan(group) {
+  return `${sum(group.map((bar) => STRIPS[bar].expanded))} - ${sum(group.map((bar) => STRIPS[bar].collapsed))}`;
 }
 
 /** What opens a group of bars: whatever opens any one of them. */
@@ -559,11 +582,12 @@ function toolboxStrip(s, L, bar) {
   const innermost = group.at(-1) === bar;
   const side = pageSide(L.toolbarEdge);
   const shadow = s.shadow && m.shadow;
-  const height = `calc(${m.collapsed}${innermost ? ` + ${m.trigger}` : ""} + ${OPENNESS} * (${m.expanded} - ${m.collapsed}))`;
+  const zone = zoneDepth(m.trigger, groupSpan(group));
+  const height = `calc(${m.collapsed}${innermost ? ` + ${zone}` : ""} + ${OPENNESS} * (${m.expanded} - ${m.collapsed}))`;
   // Sliding over the page, the innermost bar's margin cancels the whole
   // group's growth, so the page beyond stays where it was.
-  const groupGrowth = `${OPENNESS} * (${sum(group.map((b) => STRIPS[b].expanded))} - ${sum(group.map((b) => STRIPS[b].collapsed))})`;
-  const margin = s.overlay ? `calc(-1 * ${m.trigger} - ${groupGrowth})` : `calc(-1 * ${m.trigger})`;
+  const groupGrowth = `${OPENNESS} * (${groupSpan(group)})`;
+  const margin = s.overlay ? `calc(-1 * ${zone} - ${groupGrowth})` : `calc(-1 * ${zone})`;
   const props = ["min-height", "max-height", ...(innermost ? [`margin-${side}`] : []), ...(shadow ? ["filter"] : [])];
 
   return [
@@ -574,7 +598,7 @@ ${rule(`${HGUARD} ${m.sel}`, [
   "box-sizing: border-box",
   `min-height: ${height}`,
   `max-height: ${height}`,
-  ...(innermost ? [`border-${side}: ${m.trigger} solid transparent`, "background-clip: padding-box", `margin-${side}: ${margin}`] : []),
+  ...(innermost ? [`border-${side}: ${zone} solid transparent`, "background-clip: padding-box", `margin-${side}: ${margin}`] : []),
   "overflow: hidden",
   "position: relative",
   "z-index: 10",
@@ -620,7 +644,8 @@ function fixedStrips(s, L) {
     const closedOffset = offset(i, false);
     const openOffset = hides || !s.overlay ? offset(i, true) : closedOffset;
     const moves = group.length > 0 && openOffset !== closedOffset;
-    const trigger = innermost ? ` + ${m.trigger}` : "";
+    const zone = zoneDepth(m.trigger, groupSpan(group));
+    const trigger = innermost ? ` + ${zone}` : "";
     const height = hides ? `calc(${m.collapsed}${trigger} + ${OPENNESS} * (${m.expanded} - ${m.collapsed}))` : m.expanded;
     const props = [...(hides ? ["min-height", "max-height"] : []), ...(moves ? [edge] : []), ...(shadow ? ["filter"] : [])];
 
@@ -636,7 +661,7 @@ ${rule(`${HGUARD} ${m.sel}`, [
   `max-height: ${height}`,
   // Hiding bars cover the ones they open over.
   `z-index: ${hides ? 12 : 10}`,
-  ...(innermost ? [`border-${side}: ${m.trigger} solid transparent`, "background-clip: padding-box"] : []),
+  ...(innermost ? [`border-${side}: ${zone} solid transparent`, "background-clip: padding-box"] : []),
   ...(hides ? ["overflow: hidden"] : []),
   ...(shadow ? [SHADOW] : []),
   ...(props.length ? stateTransition() : []),
@@ -789,14 +814,15 @@ ${rule(TB, ["order: 1"])}`);
     L.fixedSels.length ? `:hover:not(:has(${oneOrIs(L.fixedSels)}:hover))` : ":hover",
     // Typing in the address bar, or keyboard focus anywhere in the toolbar.
     `:has(${rows}:focus-within)`,
-    // Address bar results, toolbar button panels and menus mark themselves [open].
-    `:has(${rows} [open]:not([open="false"]))`,
+    // Address bar results, toolbar button panels and menus mark themselves
+    // [open]; a tab's mark is unreliable (see TAB_PANELS_OPEN).
+    `:has(${rows} [open]:not([open="false"], #tabbrowser-tabs *))`,
     // Windows and Linux: the menu bar Alt brings up (an auto-hiding one drops [inactive]).
     ':has(#toolbar-menubar[autohide="true"]:not([inactive]))',
     ...(L.tabsInToolbox ? [":has(#tabbrowser-tabs[movingtab])", ":has(tab-group[movingtabgroup])"] : []),
   ];
   const outside = [
-    ...(L.tabsInToolbox ? [":has(#tab-group-editor panel[panelopen])"] : []),
+    ...(L.tabsInToolbox ? [TAB_PANELS_OPEN] : []),
     `:has(:is(${menuList}) :is(menu, menuitem)[_moz-menuactive])`,
     `:has(:is(${menuList}):hover)`,
   ];
@@ -861,6 +887,10 @@ ${rule(`${HGUARD}${PAGE_WANTS_POINTER} #navigator-toolbox::before`, ["pointer-ev
 
   // Closed, all but the hover zone is out of the window; open, nothing is.
   const away = bottom ? `calc(100% - ${trigger})` : `calc(${trigger} - 100%)`;
+  // The zone is the toolbox's border, so it would hang below the open rows.
+  // Clipping cuts it off where the rows cover it (100% is rows plus zone);
+  // clipped-off parts don't take the pointer. See zoneDepth.
+  const cut = `calc(${OPENNESS} * clamp(0px, 100% - ${trigger}, ${trigger}))`;
   // The hidden toolbar's hover zone lets the pointer through in two cases
   // below. A toolbar held open by typing, a menu or a panel takes the pointer
   // back: pointer-events: auto in the open rule, which comes later with
@@ -884,7 +914,8 @@ ${rule(`${HGUARD}${PAGE_WANTS_POINTER} #navigator-toolbox`, ["pointer-events: no
   blocks.push(`/* Toolbar auto-hide. The toolbox floats over the page and slides out of view,
    leaving only its transparent inner border (the hover zone) inside the
    window. translate percentages are relative to the toolbox's own height, so
-   it hides exactly whatever rows it currently has. */
+   it hides exactly whatever rows it currently has. Open, the part of the zone
+   below the rows is clipped off. */
 ${rule(TB, [
   "position: absolute",
   atEdge,
@@ -894,6 +925,7 @@ ${rule(TB, [
   "background-clip: padding-box",
   ...background,
   `translate: 0 calc((1 - ${OPENNESS}) * ${away})`,
+  `clip-path: ${bottom ? `inset(${cut} 0 0 0)` : `inset(0 0 ${cut} 0)`}`,
   ...stateTransition(),
 ])}
 

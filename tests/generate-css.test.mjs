@@ -78,6 +78,14 @@ function variants() {
   return out;
 }
 
+const OPENNESS = "max(var(--ahtb-open), var(--ahtb-reopen))";
+const SIDE_GROWTH = "var(--ahtb-expanded) - var(--ahtb-collapsed)";
+
+/** A hover zone that gives way as its bar opens (zoneDepth in generate-css.js). */
+function zone(size, growth) {
+  return `calc(${size} - ${OPENNESS} * clamp(0px, ${growth}, ${size}))`;
+}
+
 function stripComments(css) {
   return css.replace(/\/\*[\s\S]*?\*\//g, "");
 }
@@ -106,7 +114,7 @@ test("defaults reproduce the original userChrome.css values", () => {
     assert.ok(css.includes(id), `missing ${id}`);
   }
   assert.ok(css.includes("#sidebar-container:not([sidebar-positionend]):has(#tabbrowser-tabs[movingtab])"));
-  assert.ok(css.includes(":root:has(#tab-group-editor panel[panelopen]) #sidebar-container:not([sidebar-positionend])"));
+  assert.ok(css.includes(":root:has(:is(#tab-group-editor, #tab-note-menu) panel[panelopen]) #sidebar-container:not([sidebar-positionend])"));
 });
 
 test("every variant is well-formed", () => {
@@ -139,8 +147,8 @@ test("every variant is well-formed", () => {
 
 test("right side mirrors the margins onto the start edge", () => {
   const css = generateCss({ ...defaults(), position: "right" });
-  assert.ok(css.includes("#sidebar-container[sidebar-positionend] {\n  border-inline-start: var(--ahtb-trigger) solid transparent !important;"));
-  assert.ok(css.includes("margin-inline-start: calc(-1 * var(--ahtb-trigger) - max(var(--ahtb-open), var(--ahtb-reopen)) * (var(--ahtb-expanded) - var(--ahtb-collapsed)))"));
+  assert.ok(css.includes(`#sidebar-container[sidebar-positionend] {\n  border-inline-start: ${zone("var(--ahtb-trigger)", SIDE_GROWTH)} solid transparent !important;`));
+  assert.ok(css.includes(`margin-inline-start: calc(-1 * ${zone("var(--ahtb-trigger)", SIDE_GROWTH)} - ${OPENNESS} * (${SIDE_GROWTH}))`));
 });
 
 test("push mode keeps the footprint growing instead of cancelling it", () => {
@@ -151,7 +159,7 @@ test("push mode keeps the footprint growing instead of cancelling it", () => {
 test("top: overlay clears the macOS window controls, push does not", () => {
   const overlay = generateCss({ ...defaults(), position: "top" });
   assert.match(overlay, /@media \(-moz-platform: macos\)/);
-  assert.ok(overlay.includes("margin-bottom: calc(-1 * var(--ahtb-trigger) - max(var(--ahtb-open), var(--ahtb-reopen)) * (var(--ahtb-expanded) - var(--ahtb-collapsed)))"));
+  assert.ok(overlay.includes(`margin-bottom: calc(-1 * ${zone("var(--ahtb-trigger)", SIDE_GROWTH)} - ${OPENNESS} * (${SIDE_GROWTH}))`));
   assert.match(overlay, /--ahtb-expanded: var\(--tabstrip-min-height\);/);
   assert.match(overlay, /#nav-bar > \.titlebar-buttonbox-container/);
 
@@ -231,7 +239,7 @@ test("toolbar auto-hide slides the toolbox and keeps it open while in use", () =
   assert.ok(css.includes("translate: 0 calc((1 - max(var(--ahtb-open), var(--ahtb-reopen))) * calc(var(--ahtb-toolbar-trigger) - 100%))"));
   assert.ok(css.includes(":root:not([inFullscreen], [customizing]) #navigator-toolbox:hover"));
   assert.ok(css.includes("#navigator-toolbox:has(:is(#nav-bar, #PersonalToolbar, #toolbar-menubar):focus-within)"));
-  assert.ok(css.includes('#navigator-toolbox:has(:is(#nav-bar, #PersonalToolbar, #toolbar-menubar) [open]:not([open="false"]))'));
+  assert.ok(css.includes('#navigator-toolbox:has(:is(#nav-bar, #PersonalToolbar, #toolbar-menubar) [open]:not([open="false"], #tabbrowser-tabs *))'));
   assert.doesNotMatch(generateCss(defaults()), /#navigator-toolbox/);
 });
 
@@ -322,7 +330,7 @@ test("hold rules keep every auto-hiding piece as it is while the pointer is out 
   assert.ok(holds(vertical, "#sidebar-container:not([sidebar-positionend])"));
   assert.ok(vertical.includes(held));
   // The sizes follow the openness every frame; only the openness transitions.
-  assert.ok(vertical.includes("min-width: calc(var(--ahtb-collapsed) + var(--ahtb-trigger) + max(var(--ahtb-open), var(--ahtb-reopen)) * (var(--ahtb-expanded) - var(--ahtb-collapsed)))"));
+  assert.ok(vertical.includes(`min-width: calc(var(--ahtb-collapsed) + ${zone("var(--ahtb-trigger)", SIDE_GROWTH)} + ${OPENNESS} * (${SIDE_GROWTH}))`));
   assert.match(vertical, /transition-property: --ahtb-open, --ahtb-reopen !important;\n  transition-duration: var\(--ahtb-duration\) !important;/);
   assert.match(vertical, /transition-delay: var\(--ahtb-close-delay\) !important;/);
   assert.match(vertical, /--ahtb-open: 1 !important;\n  --ahtb-reopen: 1 !important;\n  transition-delay: var\(--ahtb-open-delay\) !important;/);
@@ -382,7 +390,7 @@ test("tabs on the other edge from the toolbar are a fixed strip; on the same edg
 
   const bottomBoth = generateCss({ ...defaults(), position: "bottom", toolbarPosition: "bottom", bookmarksPosition: "bottom" });
   assert.match(bottomBoth, /position: relative !important;\n  z-index: 10 !important;/);
-  assert.ok(bottomBoth.includes("margin-top: calc(-1 * var(--ahtb-trigger) - max(var(--ahtb-open), var(--ahtb-reopen)) * (var(--ahtb-expanded) - var(--ahtb-collapsed))) !important;"));
+  assert.ok(bottomBoth.includes(`margin-top: calc(-1 * ${zone("var(--ahtb-trigger)", SIDE_GROWTH)} - ${OPENNESS} * (${SIDE_GROWTH})) !important;`));
   assert.doesNotMatch(bottomBoth, /position: fixed/);
 });
 
@@ -565,10 +573,10 @@ test("bookmarks bar hiding in the toolbox reaches out of it", () => {
   const css = generateCss({ ...defaults(), bookmarksAutoHide: true });
   // Out of the toolbox's clip and above the page.
   assert.match(css, /#navigator-toolbox \{\n  z-index: 3 !important;\n  overflow: visible !important;/);
-  assert.ok(css.includes("#PersonalToolbar {\n  box-sizing: border-box !important;\n  min-height: calc(0px + var(--ahtb-bm-trigger) + max(var(--ahtb-open), var(--ahtb-reopen)) * (var(--ahtb-bm-height) - 0px)) !important;"));
-  assert.match(css, /border-bottom: var\(--ahtb-bm-trigger\) solid transparent !important;/);
+  assert.ok(css.includes(`#PersonalToolbar {\n  box-sizing: border-box !important;\n  min-height: calc(0px + ${zone("var(--ahtb-bm-trigger)", "var(--ahtb-bm-height) - 0px")} + ${OPENNESS} * (var(--ahtb-bm-height) - 0px)) !important;`));
+  assert.ok(css.includes(`border-bottom: ${zone("var(--ahtb-bm-trigger)", "var(--ahtb-bm-height) - 0px")} solid transparent !important;`));
   // Sliding open over the page, which stays put.
-  assert.ok(css.includes("margin-bottom: calc(-1 * var(--ahtb-bm-trigger) - max(var(--ahtb-open), var(--ahtb-reopen)) * (var(--ahtb-bm-height) - 0px)) !important;"));
+  assert.ok(css.includes(`margin-bottom: calc(-1 * ${zone("var(--ahtb-bm-trigger)", "var(--ahtb-bm-height) - 0px")} - ${OPENNESS} * (var(--ahtb-bm-height) - 0px)) !important;`));
   assert.ok(css.includes(':has(#PersonalToolbar [open]:not([open="false"])) #PersonalToolbar'));
   assert.ok(css.includes(":has(#placesContext :is(menu, menuitem)[_moz-menuactive]) #PersonalToolbar"));
   // Its size, or nothing while Firefox hides the bar.
@@ -638,4 +646,35 @@ test("Firefox's line between the bars and the page goes where the page reaches t
   assert.ok(generateCss({ ...defaults(), position: "left" }).includes(`#tabbrowser-tabbox:not([sidebar-panel-open], [ai-window-open]) ${SIDE}`));
   assert.ok(!generateCss({ ...defaults(), position: "left", autoHide: false }).includes(SIDE));
   assert.ok(!generateCss({ ...defaults(), position: "top" }).includes(SIDE));
+});
+
+test("a tab's [open] mark doesn't hold the toolbar open; the tab panels people use do", () => {
+  const css = generateCss({ ...defaults(), position: "top", toolbarAutoHide: true });
+  // Firefox's tab hover preview leaves [open] behind on a tab.
+  assert.ok(css.includes('[open]:not([open="false"], #tabbrowser-tabs *))'));
+  assert.ok(!css.includes('[open]:not([open="false"]))'));
+  assert.ok(css.includes(":has(:is(#tab-group-editor, #tab-note-menu) panel[panelopen]) #navigator-toolbox"));
+  // The tab strip's own conditions only ever looked at its toolbar buttons.
+  const strip = generateCss({ ...defaults(), position: "top" });
+  assert.ok(strip.includes(":has(#TabsToolbar toolbarbutton[open])"));
+  assert.ok(strip.includes(":has(:is(#tab-group-editor, #tab-note-menu) panel[panelopen]) #TabsToolbar"));
+});
+
+test("an open bar's hover zone gives way, so the page right beside it can be clicked", () => {
+  // The sliding toolbar clips off the part of its zone below the rows.
+  const top = generateCss({ ...defaults(), position: "top", toolbarAutoHide: true });
+  assert.ok(top.includes(`clip-path: inset(0 0 calc(${OPENNESS} * clamp(0px, 100% - var(--ahtb-toolbar-trigger), var(--ahtb-toolbar-trigger))) 0) !important;`));
+  const bottom = generateCss({ ...defaults(), position: "left", toolbarAutoHide: true, toolbarPosition: "bottom", bookmarksPosition: "bottom" });
+  assert.ok(bottom.includes(`clip-path: inset(calc(${OPENNESS} * clamp(0px, 100% - var(--ahtb-toolbar-trigger), var(--ahtb-toolbar-trigger))) 0 0 0) !important;`));
+  // The side tab bar's zone shrinks by its growth.
+  const side = generateCss({ ...defaults(), position: "left" });
+  assert.ok(side.includes(`border-inline-end: ${zone("var(--ahtb-trigger)", SIDE_GROWTH)} solid transparent !important;`));
+  // Strips: by the growth of their whole group, in the toolbox and on the other edge.
+  const group = generateCss({ ...defaults(), position: "top", bookmarksAutoHide: true, barOrder: "toolbar,tabs,bookmarks" });
+  assert.ok(group.includes(`border-bottom: ${zone("var(--ahtb-bm-trigger)", "calc(var(--ahtb-expanded) + var(--ahtb-bm-height)) - var(--ahtb-collapsed)")} solid transparent !important;`));
+  const fixed = generateCss({ ...defaults(), position: "bottom" });
+  assert.ok(fixed.includes(`border-top: ${zone("var(--ahtb-trigger)", SIDE_GROWTH)} solid transparent !important;`));
+  // The wiped toolbar's strip already sits under the rows once they open.
+  const wipe = generateCss({ ...defaults(), position: "bottom", toolbarAutoHide: true });
+  assert.ok(!stripComments(wipe).includes("#navigator-toolbox {\n  clip-path"));
 });
