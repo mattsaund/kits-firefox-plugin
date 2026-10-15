@@ -5,6 +5,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
+import { SIGNALS } from "../extension/shared/click-through.js";
 import { generateCss } from "../extension/shared/generate-css.js";
 import {
   POSITIONS,
@@ -470,7 +471,7 @@ test("hover zones over the page, for the click-through page script", () => {
 });
 
 test("pointing at something clickable near an edge lets the pointer through every hover zone", () => {
-  const signal = ":has(#pageAction-urlbar-autohide-tab-bar_kits)";
+  const signal = `:has(#pageAction-urlbar-autohide-tab-bar_kits[tooltiptext="${SIGNALS.hold}"])`;
   for (const s of variants()) {
     const css = generateCss(s);
     const L = barLayout(s);
@@ -677,4 +678,34 @@ test("an open bar's hover zone gives way, so the page right beside it can be cli
   // The wiped toolbar's strip already sits under the rows once they open.
   const wipe = generateCss({ ...defaults(), position: "bottom", toolbarAutoHide: true });
   assert.ok(!stripComments(wipe).includes("#navigator-toolbox {\n  clip-path"));
+});
+
+test("on pages the page script can't see into, hover zones deeper than 10px shrink to 10px", () => {
+  const unseen = `:root:has(#pageAction-urlbar-autohide-tab-bar_kits[tooltiptext="${SIGNALS.blind}"]) {`;
+  const css = generateCss({ ...defaults(), position: "top", toolbarAutoHide: true, toolbarTriggerSize: 40, triggerSize: 8 });
+  const at = css.indexOf(unseen);
+  assert.ok(at > 0);
+  const block = css.slice(at, css.indexOf("}", at));
+  assert.match(block, /--ahtb-toolbar-trigger: 10px !important;/);
+  // Zones already that shallow are left as they are.
+  assert.doesNotMatch(block, /--ahtb-trigger:|--ahtb-bm-trigger:/);
+  // The hidden bookmarks bar's zero zone still wins: its rule is more specific.
+  assert.ok(css.indexOf(":root:has(#PersonalToolbar[collapsed]") < at);
+  assert.ok(!generateCss(defaults()).includes(unseen));
+  // The two signals are told apart by title.
+  assert.notEqual(SIGNALS.hold, SIGNALS.blind);
+  for (const title of Object.values(SIGNALS)) assert.match(title, /^[\w :]+$/, "safe inside a CSS attribute selector");
+});
+
+test("extension buttons can take the toolbar button color, as their icons' shapes", () => {
+  const icon = ":is(#nav-bar, #PersonalToolbar) .webextension-browser-action .toolbarbutton-icon {";
+  const css = generateCss({ ...defaults(), toolbarIconCustom: true, toolbarIconColor: "#ff0000", toolbarIconExtensions: true });
+  const at = css.indexOf(icon);
+  assert.ok(at > 0);
+  const block = css.slice(at, css.indexOf("}", at));
+  assert.match(block, /background-color: #ff0000 !important;/);
+  assert.match(block, /mask-image: var\(--webextension-toolbar-image\) !important;/);
+  // Off, or with the theme's button color, extension icons stay as they are.
+  assert.ok(!generateCss({ ...defaults(), toolbarIconCustom: true }).includes(icon));
+  assert.ok(!generateCss({ ...defaults(), toolbarIconExtensions: true }).includes(icon));
 });

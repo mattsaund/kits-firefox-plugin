@@ -3,6 +3,30 @@
 Each version is a `v` tag, with the extension and helper on its
 [release page](https://github.com/mattsaund/kits-firefox-plugin/releases).
 
+## 0.4.7 — 2026-10-15
+
+- **Profiles.** Save everything on the settings page under a name, together
+  with your Firefox theme, and switch between them. Using a profile loads its
+  settings and switches to its theme; press **Apply** for the rest.
+- **Firefox themes on the settings page.** Turn on **Show my themes** to see
+  the themes installed in Firefox and switch between them in one click.
+  Firefox asks you to allow it first. The preview now shows your theme's real
+  colors.
+- **Toolbar button color**, under Toolbar and address bar (it was called
+  "Toolbar icons"): back, forward, reload, sidebar, the extensions button, the
+  ☰ menu and Firefox's other buttons. **Extension buttons too** gives
+  extensions pinned to the toolbar, like uBlock Origin, the same color, as
+  their icons' shapes.
+- **Let clicks through to the page works next to pages it can't see into.**
+  Firefox doesn't let Kits look inside other extensions' pages, such as
+  Tabliss's new tab page, or its own pages. Kits can't tell a button there
+  from empty space, so its hover zones shrink to 10px on those pages. Buttons
+  near the edge, like Tabliss's settings gear, can be clicked, and the bars
+  still open from the edge.
+- The Apply card's profile picker is now called **Firefox profile**, so it
+  isn't confused with the new profiles.
+- Press **Apply** after updating. No helper update needed.
+
 ## 0.4.6 — 2026-10-15
 
 - **The search bar's outline color is easier to find.** The setting for the

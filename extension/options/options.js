@@ -1,6 +1,6 @@
 // The settings page: the form, the live preview, the helper connection
-// (Apply / Remove), the list of what Apply changes, update checks and "Let
-// clicks through to the page".
+// (Apply / Remove), the list of what Apply changes, update checks, "Let
+// clicks through to the page", saved profiles and Firefox's themes.
 
 import {
   EASINGS,
@@ -15,6 +15,7 @@ import {
 } from "../shared/settings.js";
 import { CLICK_THROUGH_ACCESS, clickThroughAllowed } from "../shared/click-through.js";
 import { generateCss, hexToRgba } from "../shared/generate-css.js";
+import { profileMatches, profileName, sameName, sanitizeProfiles, saveProfile } from "../shared/profiles.js";
 import {
   REPO,
   UPDATE_CHECK_CONSENT,
@@ -424,6 +425,7 @@ function onSettingsChanged() {
   updateDependents();
   renderOrder();
   renderPreview();
+  renderProfiles();
   refreshDerived();
   scheduleSave();
 }
@@ -543,9 +545,9 @@ function profileLine() {
         h("option", { value: p.path, selected: !needsProfileChoice() && p.path === st.profile.path }, label(p)),
       ),
     );
-    return h("div", { class: "profile-line" }, h("span", {}, "Profile:"), select);
+    return h("div", { class: "profile-line" }, h("span", {}, "Firefox profile:"), select);
   }
-  return h("div", { class: "profile-line" }, h("span", {}, `Profile: ${label(st.profile)}`));
+  return h("div", { class: "profile-line" }, h("span", {}, `Firefox profile: ${label(st.profile)}`));
 }
 
 /** The status messages for a connected helper. */
@@ -756,6 +758,242 @@ function renderHelper() {
 }
 
 // ---------------------------------------------------------------------------
+// Firefox theme
+// ---------------------------------------------------------------------------
+
+// Listing the installed themes and switching between them takes Firefox's
+// "management" permission. It also covers seeing the other add-ons, so it is
+// optional: the "Show my themes" switch asks for it, and is it. The theme in
+// use, for the preview's colors, needs no permission.
+const THEME_ACCESS = { permissions: ["management"] };
+
+const themeSwitch = document.getElementById("theme-access");
+const themeList = document.getElementById("theme-list");
+const themeMore = document.getElementById("theme-more");
+const previewThemeNote = document.getElementById("preview-theme-note");
+let themes = []; // [{ id, name, enabled }] while the switch is on
+
+/** Whether the user has allowed listing the themes. */
+function themeAccessAllowed() {
+  return browser.permissions.contains(THEME_ACCESS);
+}
+
+/** The theme in use, as { id, name }, or null when themes can't be listed. */
+function themeInUse() {
+  const theme = themes.find((t) => t.enabled);
+  return theme ? { id: theme.id, name: theme.name } : null;
+}
+
+/** The switch, and the list of installed themes while it is on. */
+async function renderThemes() {
+  const allowed = await themeAccessAllowed();
+  themeSwitch.checked = allowed;
+  themes = allowed
+    ? (await browser.management.getAll())
+        .filter((addon) => addon.type === "theme")
+        .map(({ id, name, enabled }) => ({ id, name, enabled }))
+    : [];
+  themeList.hidden = themeMore.hidden = !allowed;
+  themeList.replaceChildren(
+    ...themes.map((theme) =>
+      h(
+        "li",
+        {},
+        h("span", { class: "item-name" }, theme.name),
+        theme.enabled
+          ? h("span", { class: "item-badge" }, "In use")
+          : h("button", { type: "button", class: "ghost item-action", "data-theme": theme.id }, "Use"),
+      ),
+    ),
+  );
+  // Profiles say whether their theme is the one in use.
+  renderProfiles();
+}
+
+/** Switches Firefox to an installed theme; Firefox changes it at once. */
+async function useTheme(id) {
+  await browser.management.setEnabled(id, true);
+}
+
+themeList.addEventListener("click", (e) => {
+  const id = e.target.closest("button[data-theme]")?.dataset.theme;
+  if (id) useTheme(id);
+});
+
+// As with the other permission switches, permissions.request() has to be the
+// first thing the handler awaits.
+themeSwitch.addEventListener("change", async () => {
+  if (themeSwitch.checked) {
+    themeSwitch.checked = await browser.permissions.request(THEME_ACCESS);
+  } else {
+    await browser.permissions.remove(THEME_ACCESS);
+  }
+});
+browser.permissions.onAdded.addListener(renderThemes);
+browser.permissions.onRemoved.addListener(renderThemes);
+
+// Theme colors for the preview's "Theme" stand-ins (see options.css), each
+// from the first of these colors the theme sets. Older themes use the names
+// after the first.
+const PREVIEW_THEME_COLORS = {
+  "--theme-bar": ["frame", "accentcolor"],
+  "--theme-text": ["tab_background_text", "textcolor"],
+  "--theme-selected": ["tab_selected", "toolbar"],
+  "--theme-selected-text": ["tab_text", "toolbar_text"],
+  "--pv-window": ["toolbar", "frame", "accentcolor"],
+  "--theme-icons": ["icons", "toolbar_text"],
+  "--theme-field": ["toolbar_field"],
+  "--theme-field-text": ["toolbar_field_text"],
+  "--theme-focus": ["toolbar_field_border_focus"],
+};
+
+/** A theme color as CSS: a string, or an [r, g, b] list from older themes. */
+function themeColor(value) {
+  const css = Array.isArray(value) ? `rgb(${value.join(", ")})` : value;
+  return typeof css === "string" && CSS.supports("color", css) ? css : null;
+}
+
+/** Puts the colors of the theme in use into the preview; the stand-ins stay for any it doesn't set. */
+async function renderThemeColors() {
+  const { colors } = await browser.theme.getCurrent();
+  let found = 0;
+  for (const [name, sources] of Object.entries(PREVIEW_THEME_COLORS)) {
+    const value = sources.map((source) => themeColor(colors?.[source])).find(Boolean);
+    if (value) {
+      preview.style.setProperty(name, value);
+      found++;
+    } else {
+      preview.style.removeProperty(name);
+    }
+  }
+  previewThemeNote.textContent = found
+    ? "Theme colors come from your Firefox theme."
+    : "Theme colors are approximated here; Firefox uses your real theme.";
+}
+
+// The theme changed, here or anywhere else in Firefox.
+browser.theme.onUpdated.addListener(() => {
+  renderThemeColors();
+  renderThemes();
+});
+
+// ---------------------------------------------------------------------------
+// Profiles
+// ---------------------------------------------------------------------------
+
+const profileList = document.getElementById("profile-list");
+const profileNameInput = document.getElementById("profile-name");
+const profileSaveButton = document.getElementById("profile-save");
+const profileNote = document.getElementById("profile-note");
+let profiles = []; // see shared/profiles.js
+
+let profileNoteTimer = null;
+
+/** A line under the profiles for a few seconds. */
+function showProfileNote(text) {
+  profileNote.textContent = text;
+  profileNote.hidden = false;
+  clearTimeout(profileNoteTimer);
+  profileNoteTimer = setTimeout(() => (profileNote.hidden = true), 6000);
+}
+
+/** Keeps a new list of profiles and redraws them. */
+async function storeProfiles(next) {
+  profiles = next;
+  await browser.storage.local.set({ profiles });
+  renderProfiles();
+}
+
+/**
+ * The list: each profile, its theme, and Use and Delete. A profile is "in
+ * use" while the settings here are its settings and, when it has a theme and
+ * the themes can be listed, that theme is on.
+ */
+function renderProfiles() {
+  const theme = themeInUse();
+  const items = profiles.map((profile) => {
+    const inUse = profileMatches(profile, settings) && (!profile.theme || !theme || profile.theme.id === theme.id);
+    const remove = h("button", { type: "button", class: "ghost danger item-action" }, "Delete");
+    confirmable(remove, "Delete?", () => {
+      storeProfiles(profiles.filter((p) => p.id !== profile.id));
+      showProfileNote(`Deleted "${profile.name}".`);
+    });
+    return h(
+      "li",
+      {},
+      h("span", { class: "item-name" }, profile.name, h("small", {}, profile.theme ? `Theme: ${profile.theme.name}` : "No theme saved")),
+      inUse
+        ? h("span", { class: "item-badge" }, "In use")
+        : h("button", { type: "button", class: "ghost item-action", "data-profile": profile.id }, "Use"),
+      remove,
+    );
+  });
+  profileList.replaceChildren(...items);
+  profileList.hidden = !profiles.length;
+  renderProfileSave();
+}
+
+/** The save button says when saving replaces a profile of the same name. */
+function renderProfileSave() {
+  const name = profileName(profileNameInput.value);
+  profileSaveButton.disabled = !name;
+  profileSaveButton.textContent = profiles.some((p) => name && sameName(p.name, name)) ? "Replace profile" : "Save as profile";
+}
+
+/** Saves the settings here, and the theme in use if known, under the typed name. */
+async function saveCurrentProfile() {
+  const name = profileName(profileNameInput.value);
+  if (!name) return;
+  const theme = themeInUse();
+  try {
+    await storeProfiles(saveProfile(profiles, { id: crypto.randomUUID(), name, settings, theme }));
+  } catch (e) {
+    showProfileNote(e.message);
+    return;
+  }
+  profileNameInput.value = "";
+  renderProfileSave();
+  showProfileNote(
+    theme
+      ? `Saved "${name}", with the theme ${theme.name}.`
+      : `Saved "${name}". Turn on "Show my themes" below to save your theme with it too.`,
+  );
+}
+
+/** Loads a profile's settings here and switches to its theme. */
+async function useProfile(id) {
+  const profile = profiles.find((p) => p.id === id);
+  if (!profile) return;
+  settings = sanitize(profile.settings);
+  writeForm(settings);
+  onSettingsChanged();
+  let themeNote = "";
+  if (profile.theme) {
+    if (!(await themeAccessAllowed())) {
+      themeNote = ` Turn on "Show my themes" to switch to its theme, ${profile.theme.name}, too.`;
+    } else if (!themes.some((t) => t.id === profile.theme.id)) {
+      themeNote = ` Its theme, ${profile.theme.name}, isn't installed any more.`;
+    } else {
+      await useTheme(profile.theme.id);
+    }
+  }
+  showProfileNote(`Loaded "${profile.name}". Press Apply to use it in Firefox.${themeNote}`);
+}
+
+profileList.addEventListener("click", (e) => {
+  const id = e.target.closest("button[data-profile]")?.dataset.profile;
+  if (id) useProfile(id);
+});
+profileSaveButton.addEventListener("click", saveCurrentProfile);
+profileNameInput.addEventListener("input", renderProfileSave);
+profileNameInput.addEventListener("keydown", (e) => {
+  if (e.key !== "Enter") return;
+  // Enter would submit the settings form.
+  e.preventDefault();
+  saveCurrentProfile();
+});
+
+// ---------------------------------------------------------------------------
 // Buttons
 // ---------------------------------------------------------------------------
 
@@ -877,9 +1115,12 @@ async function init() {
   onWindows = (await browser.runtime.getPlatformInfo()).os === "win";
   renderUpdate();
   renderClickThrough();
-  const stored = await browser.storage.local.get(["settings", "profileOverride"]);
+  renderThemeColors();
+  const stored = await browser.storage.local.get(["settings", "profileOverride", "profiles"]);
   settings = sanitize(stored.settings ?? {});
   profileOverride = stored.profileOverride ?? null;
+  profiles = sanitizeProfiles(stored.profiles);
+  renderThemes();
   writeForm(settings);
   updateDependents();
   renderOrder();

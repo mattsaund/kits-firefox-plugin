@@ -4,7 +4,7 @@
 // settings from the last Apply, asks the helper to stop re-applying them at
 // every start.
 
-import { CLICK_THROUGH_ACCESS, clickThroughAllowed } from "./shared/click-through.js";
+import { CLICK_THROUGH_ACCESS, SIGNALS, clickThroughAllowed } from "./shared/click-through.js";
 import { edgeZones } from "./shared/settings.js";
 import { checkForUpdate, storedUpdate, updateChecksAllowed } from "./shared/updates.js";
 
@@ -60,11 +60,21 @@ browser.permissions.onRemoved.addListener((removed) => {
 // flag redraws them; its page script, told to start over, sets it again if
 // the pointer needs it.
 browser.tabs.onActivated.addListener(({ tabId }) => {
-  flagTab(tabId, false);
+  flagTab(tabId, null);
   browser.tabs.sendMessage(tabId, { type: "click-through-reset" }).catch(() => {
     // No page script in that tab.
   });
+  checkSeen(tabId);
 });
+
+// A page finished loading in the tab in front: it may be one the page script
+// can't run in, or no longer be one.
+browser.tabs.onUpdated.addListener(
+  (tabId, changeInfo, tab) => {
+    if (changeInfo.status === "complete" && tab.active) checkSeen(tabId);
+  },
+  { properties: ["status"] },
+);
 
 browser.runtime.onMessage.addListener((message, sender) => {
   // The settings page asks for a check with this message ("Check now"). It
@@ -74,7 +84,7 @@ browser.runtime.onMessage.addListener((message, sender) => {
   if (message?.type === "click-through-zones") return clickThroughZones();
   // ...and says when the pointer is on something clickable near one.
   if (message?.type === "click-through" && sender.tab && sender.frameId === 0) {
-    return flagTab(sender.tab.id, message.hold === true);
+    return flagTab(sender.tab.id, message.hold === true ? "hold" : null);
   }
 });
 
@@ -136,6 +146,7 @@ async function syncClickThrough({ openTabs = false } = {}) {
   const tabs = await browser.tabs.query({});
   if (await clickThroughAllowed()) {
     if (!registered) await browser.scripting.registerContentScripts([CLICK_THROUGH_SCRIPT]);
+    for (const tab of tabs) if (tab.active) checkSeen(tab.id);
     if (!openTabs) return;
     for (const tab of tabs) {
       // Firefox's own pages and addons.mozilla.org refuse; nothing to do there.
@@ -159,21 +170,49 @@ async function clickThroughZones() {
 // in the wrong order.
 let flagQueue = Promise.resolve();
 
-/**
- * Flags a tab while its pointer is on something clickable near an edge: the
- * tab's page action is what the stylesheet looks for (see PAGE_ACTION in
- * shared/generate-css.js). The icon itself is never shown.
- */
-function flagTab(tabId, hold) {
-  flagQueue = flagQueue
-    .then(async () => {
-      if (hold && (await clickThroughAllowed())) await browser.pageAction.show(tabId);
-      else await browser.pageAction.hide(tabId);
-    })
-    .catch(() => {
-      // The tab closed in the meantime.
-    });
+/** Runs one flag change after those before it. */
+function queueFlag(change) {
+  flagQueue = flagQueue.then(change).catch(() => {
+    // The tab closed in the meantime.
+  });
   return flagQueue;
+}
+
+/**
+ * Flags a tab for the stylesheet, which looks for the tab's page action and
+ * reads its title (see SIGNALS, and PAGE_ACTION in shared/generate-css.js):
+ * "hold" while the pointer is on something clickable near an edge, "blind" on
+ * a page the page script can't run in, null for neither. The icon itself is
+ * never shown.
+ */
+function flagTab(tabId, signal) {
+  return queueFlag(async () => {
+    if (signal && (await clickThroughAllowed())) {
+      await browser.pageAction.setTitle({ tabId, title: SIGNALS[signal] });
+      await browser.pageAction.show(tabId);
+    } else {
+      await browser.pageAction.hide(tabId);
+    }
+  });
+}
+
+/**
+ * Whether the page script can run in a tab's page, found out by running a
+ * script that does nothing: Firefox refuses in other extensions' pages (a new
+ * tab page such as Tabliss), its own pages and addons.mozilla.org. Those get
+ * the "blind" flag; a page that can be seen into loses it.
+ */
+async function checkSeen(tabId) {
+  if (!(await clickThroughAllowed())) return;
+  try {
+    await browser.scripting.executeScript({ target: { tabId }, func: () => true });
+  } catch {
+    flagTab(tabId, "blind");
+    return;
+  }
+  queueFlag(async () => {
+    if ((await browser.pageAction.getTitle({ tabId })) === SIGNALS.blind) await browser.pageAction.hide(tabId);
+  });
 }
 
 /** Pops up the update window once per new version. */

@@ -95,8 +95,12 @@ export const FIELDS = {
   toolbarTriggerSize: int(2, MAX_HOVER_ZONE, 10),
   toolbarBgCustom: bool(false),
   toolbarBgColor: color("#1c1b22"),
+  // Firefox's own toolbar buttons (back, forward, reload, menu...).
   toolbarIconCustom: bool(false),
   toolbarIconColor: color("#fbfbfe"),
+  // Extensions' buttons on the toolbars too. Their icons are pictures, so this
+  // draws each one as its shape in the color.
+  toolbarIconExtensions: bool(false),
 
   // Address bar look
   urlbarBgCustom: bool(false),

@@ -261,6 +261,69 @@ code {
   font-size: 12px;
 }
 
+/* Saved profiles and installed themes, one per line. */
+.saved-list {
+  display: grid;
+  gap: 4px;
+  margin: 0 0 12px;
+  padding: 0;
+  list-style: none;
+}
+
+.saved-list li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 38px;
+  padding: 3px 3px 3px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--field);
+}
+
+.item-name {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.item-name small {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.saved-list .item-action {
+  padding: 3px 10px;
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+.item-badge {
+  padding: 3px 10px;
+  color: var(--accent);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.profile-save {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.profile-save input {
+  flex: 1 1 160px;
+  min-width: 0;
+}
+
+#theme-list {
+  margin-top: 10px;
+}
+
 .bar-order .order-move {
   padding: 2px 9px;
   border-radius: 6px;
@@ -316,6 +379,15 @@ input[type="range"] {
   font-style: normal;
   font-size: 12.5px;
   min-width: 1.6em;
+}
+
+input[type="text"] {
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--field);
+  color: var(--text);
+  font: inherit;
 }
 
 input[type="number"] {
@@ -782,7 +854,7 @@ a.primary {
   gap: 8px;
   min-height: 40px;
   padding: 6px 12px;
-  color: var(--tb-icon, var(--muted));
+  color: var(--tb-icon, var(--theme-icons, var(--muted)));
   background: var(--tb-bg, var(--pv-window));
 }
 
@@ -795,7 +867,7 @@ a.primary {
   height: var(--bx, 28px);
   padding: 0 10px;
   overflow: hidden;
-  color: var(--bm-text, var(--tb-icon, var(--muted)));
+  color: var(--bm-text, var(--tb-icon, var(--theme-icons, var(--muted))));
   background: var(--bm-bg, var(--tb-bg, var(--pv-window)));
   font-size: var(--bm-font, 11px);
 }
@@ -931,8 +1003,8 @@ a.primary {
   margin-inline: auto;
   padding: 0 12px;
   border-radius: var(--url-radius, 8px);
-  background: var(--url-bg, var(--pv-page));
-  color: var(--url-text, inherit);
+  background: var(--url-bg, var(--theme-field, var(--pv-page)));
+  color: var(--url-text, var(--theme-field-text, inherit));
   font-size: var(--url-font, 12px);
   white-space: nowrap;
   overflow: hidden;
@@ -941,7 +1013,7 @@ a.primary {
 
 /* Hovering the preview address bar shows its focus outline. */
 .pv-url:hover {
-  outline: 2px solid var(--url-focus, var(--accent));
+  outline: 2px solid var(--url-focus, var(--theme-focus, var(--accent)));
   outline-offset: -1px;
 }
 

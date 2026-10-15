@@ -21,6 +21,7 @@ going to the search bar):
   order.
 - Each bar can hide, and slides out when you point at its edge.
 - Sizes, colors and speed, set inside Firefox with a live preview.
+- Profiles: save a setup with its Firefox theme, and switch between them.
 - Optional: links near an edge stay clickable.
 
 | Hidden | Point at the edge |
@@ -72,7 +73,8 @@ Extensions can't restyle Firefox's own bars. Firefox reads that style from
 
 Nothing is collected. Update checks are optional; they ask GitHub for the
 latest version, so GitHub sees your IP address. **Let clicks through to the
-page** only looks at what's under the pointer.
+page** only looks at what's under the pointer. **Show my themes** only lists
+the themes installed in Firefox, to switch between them.
 
 ## Remove
 

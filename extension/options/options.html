@@ -21,6 +21,31 @@
   <main class="layout">
     <form id="settings" class="settings" autocomplete="off">
 
+      <!-- Profiles and themes aren't settings fields: their controls have no
+           name, so the form's input handler leaves them alone. -->
+      <section class="card">
+        <h2>Profiles</h2>
+        <p class="hint section-hint">A profile keeps every setting on this page and your Firefox theme. Using one loads it here and switches to its theme; press Apply to use the rest in Firefox.</p>
+        <ul id="profile-list" class="saved-list" aria-label="Saved profiles"></ul>
+        <div class="profile-save">
+          <input type="text" id="profile-name" maxlength="60" placeholder="Profile name" aria-label="Profile name">
+          <button id="profile-save" type="button" class="ghost">Save as profile</button>
+        </div>
+        <p id="profile-note" class="hint" aria-live="polite" hidden></p>
+      </section>
+
+      <section class="card">
+        <h2>Firefox theme</h2>
+        <!-- Not a setting but Firefox's "management" permission, which lists
+             themes; see THEME_ACCESS in options.js. -->
+        <label class="row">
+          <span class="row-label">Show my themes<small>Lists the themes installed in Firefox, to switch between them here. Firefox asks you to allow it first. Every "Theme" color on this page follows the theme in use.</small></span>
+          <input type="checkbox" class="switch" id="theme-access">
+        </label>
+        <ul id="theme-list" class="saved-list" aria-label="Installed themes" hidden></ul>
+        <p id="theme-more" class="hint" hidden><a href="https://addons.mozilla.org/firefox/themes/" target="_blank" rel="noopener">Find more themes</a></p>
+      </section>
+
       <section class="card">
         <h2>Layout</h2>
         <h3 class="first">Tab bar</h3>
@@ -210,13 +235,17 @@
           <input type="color" name="toolbarBgColor" aria-label="Toolbar background color" data-requires="toolbarBgCustom">
         </div>
         <div class="row color">
-          <span class="row-label">Toolbar icons</span>
+          <span class="row-label">Toolbar buttons<small>Back, forward, reload, sidebar, the extensions button, the ☰ menu and Firefox's other buttons</small></span>
           <div class="segmented small">
             <label><input type="radio" name="toolbarIconCustom" value="false"><span>Theme</span></label>
             <label><input type="radio" name="toolbarIconCustom" value="true"><span>Custom</span></label>
           </div>
-          <input type="color" name="toolbarIconColor" aria-label="Toolbar icon color" data-requires="toolbarIconCustom">
+          <input type="color" name="toolbarIconColor" aria-label="Toolbar button color" data-requires="toolbarIconCustom">
         </div>
+        <label class="row" data-requires="toolbarIconCustom">
+          <span class="row-label">Extension buttons too<small>Extensions pinned to the toolbar, like uBlock Origin. Their icons are pictures, so each turns into its shape in this color.</small></span>
+          <input type="checkbox" class="switch" name="toolbarIconExtensions">
+        </label>
         <h3>Address bar</h3>
         <div class="row color">
           <span class="row-label">Background</span>
@@ -439,7 +468,7 @@
         </label>
         <!-- Not a setting but Firefox's website access permission; see shared/click-through.js. -->
         <label class="row" data-requires="autoHide|toolbarAutoHide|bookmarksAutoHide">
-          <span class="row-label">Let clicks through to the page<small>Pointing at a link or button near the edge doesn't open the bar over it. Rest at the edge for a moment to open it anyway. Needs access to websites, only to see what's under the pointer. Nothing is read or sent.</small></span>
+          <span class="row-label">Let clicks through to the page<small>Pointing at a link or button near the edge doesn't open the bar over it. Rest at the edge for a moment to open it anyway. On pages Kits can't see into, like another extension's new tab page, hover zones are 10px deep instead. Needs access to websites, only to see what's under the pointer. Nothing is read or sent.</small></span>
           <input type="checkbox" class="switch" id="click-through">
         </label>
       </section>
@@ -501,7 +530,7 @@
             </div>
           </div>
         </div>
-        <p class="hint">Move the pointer to the bar's edge to try it. Theme colors are approximated here; Firefox uses your real theme.</p>
+        <p class="hint">Move the pointer to the bar's edge to try it. <span id="preview-theme-note">Theme colors are approximated here; Firefox uses your real theme.</span></p>
       </section>
 
       <section class="card apply-card" aria-live="polite">

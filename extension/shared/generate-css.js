@@ -15,6 +15,7 @@
 //
 // Settings go through sanitize() first, so values can be interpolated as-is.
 
+import { SIGNALS } from "./click-through.js";
 import { BARS, barLayout, easingCss, isVertical, sanitize } from "./settings.js";
 
 const PRODUCT_NAME = "Kits Editor for Firefox";
@@ -90,9 +91,17 @@ const SHADOW = `filter: drop-shadow(0 0 calc(12px * ${OPENNESS}) rgba(0, 0, 0, c
 // script show this address bar icon on that tab (content/click-through.js). A
 // page action is the one piece of per-tab state an extension can set that
 // appears in Firefox's own markup, so it serves as the signal; the icon itself
-// is never displayed. While it exists, the hover zones let the pointer through.
+// is never displayed. Its title says which signal it is (see SIGNALS): with
+// "hold", the hover zones let the pointer through; with "blind", the page
+// can't be seen into and the hover zones shrink to BLIND_ZONE.
 const PAGE_ACTION = "#pageAction-urlbar-autohide-tab-bar_kits";
-const PAGE_WANTS_POINTER = `:has(${PAGE_ACTION})`;
+const PAGE_WANTS_POINTER = `:has(${PAGE_ACTION}[tooltiptext="${SIGNALS.hold}"])`;
+const PAGE_UNSEEN = `:has(${PAGE_ACTION}[tooltiptext="${SIGNALS.blind}"])`;
+
+// Hover zone depth on pages the page script can't see into: Kits' default.
+// Things that far from the edge stay clickable there (Tabliss's settings
+// button sits 13px down), and the bars still open from the edge. (px)
+const BLIND_ZONE = 10;
 
 // Firefox sets this pref when the add-on first stores something and clears it
 // when the add-on is removed. Prefs load before the first window, so rules
@@ -172,7 +181,30 @@ function variables(s) {
 /* While Firefox hides the bookmarks bar ("Only on new tab", "Never") it takes
    no room and has no hover zone. Firefox marks it [collapsed] (older versions
    with "true", and "false" when shown). */
-${rule(`:root:has(${BOOKMARKS_COLLAPSED})`, ["--ahtb-bm-height: 0px", "--ahtb-bm-trigger: 0px"])}`;
+${rule(`:root:has(${BOOKMARKS_COLLAPSED})`, ["--ahtb-bm-height: 0px", "--ahtb-bm-trigger: 0px"])}${unseenPageZones(s)}`;
+}
+
+/**
+ * On a page "Let clicks through to the page" can't see into, every hover
+ * zone deeper than BLIND_ZONE shrinks to it (see PAGE_ACTION). Nothing when
+ * no zone is that deep.
+ */
+function unseenPageZones(s) {
+  const sizes = {
+    "--ahtb-trigger": s.triggerSize,
+    "--ahtb-toolbar-trigger": s.toolbarTriggerSize,
+    "--ahtb-bm-trigger": s.bookmarksTriggerSize,
+  };
+  const capped = Object.entries(sizes)
+    .filter(([, size]) => size > BLIND_ZONE)
+    .map(([name]) => `${name}: ${BLIND_ZONE}px`);
+  if (!capped.length) return "";
+  return `
+
+/* Pages "Let clicks through to the page" can't see into, like another
+   extension's new tab page: hover zones no deeper than ${BLIND_ZONE}px there. Less
+   specific than the bookmarks bar rule above, which still wins. */
+${rule(`:root${PAGE_UNSEEN}`, capped)}`;
 }
 
 /** The bookmarks bar's height: its bookmarks plus Firefox's 2px margin around them. */
@@ -977,6 +1009,19 @@ function urlbarRules(s) {
   if (s.toolbarBgCustom) toolbar.push(`background-color: ${s.toolbarBgColor}`, "background-image: none");
   if (s.toolbarIconCustom) toolbar.push(`color: ${s.toolbarIconColor}`, `--toolbarbutton-icon-fill: ${s.toolbarIconColor}`);
   if (toolbar.length) blocks.push(rule(":is(#nav-bar, #PersonalToolbar)", toolbar));
+  if (s.toolbarIconCustom && s.toolbarIconExtensions) {
+    // Firefox hands each extension button its picture in this variable. As a
+    // mask over the icon color, the picture's shape shows in that color.
+    blocks.push(`/* Extension buttons in the toolbar icon color, as their icons' shapes. */
+${rule(":is(#nav-bar, #PersonalToolbar) .webextension-browser-action .toolbarbutton-icon", [
+  "list-style-image: none",
+  `background-color: ${s.toolbarIconColor}`,
+  "mask-image: var(--webextension-toolbar-image)",
+  "mask-position: center",
+  "mask-size: contain",
+  "mask-repeat: no-repeat",
+])}`);
+  }
 
   // The address bar's tokens are declared on :root and again on the
   // <moz-urlbar> host itself, so they're overridden on #urlbar directly.
