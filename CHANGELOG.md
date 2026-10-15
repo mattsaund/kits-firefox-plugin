@@ -3,6 +3,14 @@
 Each version is a `v` tag, with the extension and helper on its
 [release page](https://github.com/mattsaund/kits-firefox-plugin/releases).
 
+## 0.4.6 — 2026-10-15
+
+- **The search bar's outline color is easier to find.** The setting for the
+  colored ring around the address bar when you click in it is now called
+  **Outline when clicked**, under Toolbar and address bar. Choose **Custom**
+  and pick a color. It used to be called "Outline while typing".
+- Press **Apply** after updating. No helper update needed.
+
 ## 0.4.5 — 2026-10-13
 
 - **Fixed: bars stuck open.** Firefox's tab previews (the card that shows
