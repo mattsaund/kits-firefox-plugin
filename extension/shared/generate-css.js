@@ -98,10 +98,51 @@ const PAGE_ACTION = "#pageAction-urlbar-autohide-tab-bar_kits";
 const PAGE_WANTS_POINTER = `:has(${PAGE_ACTION}[tooltiptext="${SIGNALS.hold}"])`;
 const PAGE_UNSEEN = `:has(${PAGE_ACTION}[tooltiptext="${SIGNALS.blind}"])`;
 
-// Hover zone depth on pages the page script can't see into: Kits' default.
-// Things that far from the edge stay clickable there (Tabliss's settings
-// button sits 13px down), and the bars still open from the edge. (px)
+// Hover zones on pages the page script can't see into (PAGE_UNSEEN), where
+// Kits can't tell a button from empty space. Those pages keep their buttons
+// by an edge near the window's corners (Tabliss's settings button, the search
+// boxes on Firefox's own pages), so within BLIND_CORNER percent of each end of
+// an edge a zone keeps only BLIND_ZONE px of its depth, Kits' default; along
+// the rest of the edge it keeps all of it. Tabliss's settings button sits
+// 13px down, so it can be clicked, and the bars still open from anywhere.
 const BLIND_ZONE = 10;
+const BLIND_CORNER = 25;
+
+/**
+ * A clip-path polygon that keeps a bar whole except near the two ends of its
+ * edge, where it stops at `corner` on its side facing the page, `side`;
+ * between them it stops at `middle`. `room` is how far the polygon reaches
+ * past the bar, for its shadow.
+ */
+function cornerClip(side, corner, middle, room = "0px") {
+  const lo = room === "0px" ? "0" : `calc(-1 * ${room})`;
+  const hi = room === "0px" ? "100%" : `calc(100% + ${room})`;
+  const [start, end] = [`${BLIND_CORNER}%`, `${100 - BLIND_CORNER}%`];
+  if (side === "top" || side === "bottom") {
+    const back = side === "bottom" ? lo : hi;
+    return `polygon(${lo} ${back}, ${hi} ${back}, ${hi} ${corner}, ${end} ${corner}, ${end} ${middle}, ${start} ${middle}, ${start} ${corner}, ${lo} ${corner})`;
+  }
+  const back = side === "right" ? lo : hi;
+  return `polygon(${back} ${lo}, ${corner} ${lo}, ${corner} ${start}, ${middle} ${start}, ${middle} ${end}, ${corner} ${end}, ${corner} ${hi}, ${back} ${hi})`;
+}
+
+/**
+ * On unseen pages, trims the hover zone of a bar that hides near the corners
+ * (see BLIND_CORNER): the zone, a transparent border `zone` deep on the bar's
+ * `side` facing the page, keeps BLIND_ZONE px there. As the bar opens the cut
+ * moves out past it, so it never clips the open bar or its shadow.
+ */
+function blindZoneRule(selector, side, zone) {
+  const room = "40px";
+  const keep = `min(${zone}, ${BLIND_ZONE}px)`;
+  const far = side === "bottom" || side === "right";
+  // Where the kept part of the zone ends, and the clip's edge past the bar.
+  const kept = far ? `calc(100% - ${zone} + ${keep})` : `calc(${zone} - ${keep})`;
+  const clear = far ? `calc(100% + ${room})` : `calc(-1 * ${room})`;
+  const corner = `calc(${kept} + ${OPENNESS} * (${clear} - ${kept}))`;
+  return `/* On pages Kits can't see into, the hover zone keeps ${BLIND_ZONE}px near the corners (see BLIND_CORNER). */
+${rule(selector, [`clip-path: ${cornerClip(side, corner, clear, room)}`])}`;
+}
 
 // Firefox sets this pref when the add-on first stores something and clears it
 // when the add-on is removed. Prefs load before the first window, so rules
@@ -181,30 +222,7 @@ function variables(s) {
 /* While Firefox hides the bookmarks bar ("Only on new tab", "Never") it takes
    no room and has no hover zone. Firefox marks it [collapsed] (older versions
    with "true", and "false" when shown). */
-${rule(`:root:has(${BOOKMARKS_COLLAPSED})`, ["--ahtb-bm-height: 0px", "--ahtb-bm-trigger: 0px"])}${unseenPageZones(s)}`;
-}
-
-/**
- * On a page "Let clicks through to the page" can't see into, every hover
- * zone deeper than BLIND_ZONE shrinks to it (see PAGE_ACTION). Nothing when
- * no zone is that deep.
- */
-function unseenPageZones(s) {
-  const sizes = {
-    "--ahtb-trigger": s.triggerSize,
-    "--ahtb-toolbar-trigger": s.toolbarTriggerSize,
-    "--ahtb-bm-trigger": s.bookmarksTriggerSize,
-  };
-  const capped = Object.entries(sizes)
-    .filter(([, size]) => size > BLIND_ZONE)
-    .map(([name]) => `${name}: ${BLIND_ZONE}px`);
-  if (!capped.length) return "";
-  return `
-
-/* Pages "Let clicks through to the page" can't see into, like another
-   extension's new tab page: hover zones no deeper than ${BLIND_ZONE}px there. Less
-   specific than the bookmarks bar rule above, which still wins. */
-${rule(`:root${PAGE_UNSEEN}`, capped)}`;
+${rule(`:root:has(${BOOKMARKS_COLLAPSED})`, ["--ahtb-bm-height: 0px", "--ahtb-bm-trigger: 0px"])}`;
 }
 
 /** The bookmarks bar's height: its bookmarks plus Firefox's 2px margin around them. */
@@ -414,6 +432,7 @@ ${rule(T, [
         `margin-inline-${inner}: ${s.overlay ? `calc(-1 * ${zone} - ${growth})` : `calc(-1 * ${zone})`}`,
       ]),
     );
+    if (s.triggerSize > BLIND_ZONE) blocks.push(blindZoneRule(`:root${PAGE_UNSEEN} ${sel}`, inner === "end" ? "right" : "left", zone));
   }
 
   // The signal only exists while the pointer is on the page, so the bar is
@@ -495,6 +514,11 @@ function sum(lengths) {
   const parts = lengths.filter((length) => length !== "0px");
   if (!parts.length) return "0px";
   return parts.length === 1 ? parts[0] : `calc(${parts.join(" + ")})`;
+}
+
+/** A strip's hover zone depth setting, in px. */
+function triggerPx(s, bar) {
+  return bar === "tabs" ? s.triggerSize : s.bookmarksTriggerSize;
 }
 
 /** How much a group of bars grows by, opening. */
@@ -637,6 +661,7 @@ ${rule(`${HGUARD} ${m.sel}`, [
   ...(shadow ? [SHADOW] : []),
   ...stateTransition(),
 ])}`,
+    ...(innermost && triggerPx(s, bar) > BLIND_ZONE ? [blindZoneRule(`${HGUARD}${PAGE_UNSEEN} ${m.sel}`, side, zone)] : []),
     `/* Hold the open state while the pointer is out of Firefox's sight (see holdRule). */
 ${holdRule(HGUARD, m.sel)}`,
     `/* Open. */
@@ -699,6 +724,7 @@ ${rule(`${HGUARD} ${m.sel}`, [
   ...(props.length ? stateTransition() : []),
 ])}`);
 
+    if (innermost && triggerPx(s, bar) > BLIND_ZONE) blocks.push(blindZoneRule(`${HGUARD}${PAGE_UNSEEN} ${m.sel}`, side, zone));
     if (!props.length) return;
     blocks.push(holdRule(HGUARD, m.sel));
     blocks.push(
@@ -914,6 +940,11 @@ ${rule(
 /* Pointing at something clickable near the edge: the strip lets the pointer
    through to the page (see PAGE_ACTION). */
 ${rule(`${HGUARD}${PAGE_WANTS_POINTER} #navigator-toolbox::before`, ["pointer-events: none"])}`);
+    if (s.toolbarTriggerSize > BLIND_ZONE) {
+      const keep = bottom ? `calc(100% - ${BLIND_ZONE}px)` : `${BLIND_ZONE}px`;
+      blocks.push(`/* On pages Kits can't see into, the strip keeps ${BLIND_ZONE}px near the corners (see BLIND_CORNER). */
+${rule(`${HGUARD}${PAGE_UNSEEN} #navigator-toolbox::before`, [`clip-path: ${cornerClip(bottom ? "top" : "bottom", keep, bottom ? "0" : "100%")}`])}`);
+    }
     return blocks;
   }
 
@@ -964,6 +995,13 @@ ${rule(TB, [
 ${holdRule(HGUARD, "#navigator-toolbox")}
 
 ${rule(open, [...openState(), "pointer-events: auto"])}`);
+  if (s.toolbarTriggerSize > BLIND_ZONE) {
+    // The same clip, with the zone stopping BLIND_ZONE from the window edge near the corners.
+    const middle = bottom ? cut : `calc(100% - ${cut})`;
+    const corner = bottom ? `max(${middle}, ${trigger} - ${BLIND_ZONE}px)` : `min(${middle}, 100% - ${trigger} + ${BLIND_ZONE}px)`;
+    blocks.push(`/* On pages Kits can't see into, the hover zone keeps ${BLIND_ZONE}px near the corners (see BLIND_CORNER). */
+${rule(`${HGUARD}${PAGE_UNSEEN} #navigator-toolbox`, [`clip-path: ${cornerClip(bottom ? "top" : "bottom", corner, middle)}`])}`);
+  }
   return blocks;
 }
 

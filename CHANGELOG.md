@@ -3,6 +3,17 @@
 Each version is a `v` tag, with the extension and helper on its
 [release page](https://github.com/mattsaund/kits-firefox-plugin/releases).
 
+## 0.4.8 — 2026-10-16
+
+- **Full hover zones on Tabliss and other pages Kits can't see into.** 0.4.7
+  shrank every hover zone to 10px along the whole edge on those pages, so
+  opening a bar meant pushing all the way to the edge, even far from any
+  button. Now only the corners shrink: the outer quarter of each edge,
+  where those pages put their buttons (Tabliss's settings gear, the search
+  boxes on Firefox's own pages). Everywhere else the zone keeps its full
+  depth.
+- Press **Apply** after updating. No helper update needed.
+
 ## 0.4.7 — 2026-10-15
 
 - **Profiles.** Save everything on the settings page under a name, together

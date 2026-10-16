@@ -680,18 +680,37 @@ test("an open bar's hover zone gives way, so the page right beside it can be cli
   assert.ok(!stripComments(wipe).includes("#navigator-toolbox {\n  clip-path"));
 });
 
-test("on pages the page script can't see into, hover zones deeper than 10px shrink to 10px", () => {
-  const unseen = `:root:has(#pageAction-urlbar-autohide-tab-bar_kits[tooltiptext="${SIGNALS.blind}"]) {`;
-  const css = generateCss({ ...defaults(), position: "top", toolbarAutoHide: true, toolbarTriggerSize: 40, triggerSize: 8 });
-  const at = css.indexOf(unseen);
-  assert.ok(at > 0);
-  const block = css.slice(at, css.indexOf("}", at));
-  assert.match(block, /--ahtb-toolbar-trigger: 10px !important;/);
+test("on pages the page script can't see into, hover zones keep 10px only near the corners", () => {
+  const UNSEEN = `:has(#pageAction-urlbar-autohide-tab-bar_kits[tooltiptext="${SIGNALS.blind}"])`;
+  const ruleFor = (css, selector) => {
+    const at = css.indexOf(`${UNSEEN} ${selector} {`);
+    return at < 0 ? null : css.slice(at, css.indexOf("}", at));
+  };
+  // The zones keep their depth; nothing caps them along the whole edge.
+  const sliding = generateCss({ ...defaults(), position: "top", toolbarAutoHide: true, toolbarTriggerSize: 40, triggerSize: 8 });
+  assert.ok(!sliding.includes(`:root${UNSEEN} {`));
+  // The sliding toolbar: its clip, with the corners (the outer quarters) stopping 10px from the edge.
+  const toolbox = ruleFor(sliding, "#navigator-toolbox");
+  assert.ok(toolbox.includes("clip-path: polygon(0 0, 100% 0, 100% min("));
+  assert.ok(toolbox.includes("100% - var(--ahtb-toolbar-trigger) + 10px)"));
+  assert.ok(toolbox.includes(", 75% calc(100% - calc(") && toolbox.includes(", 25% calc(100% - calc("));
   // Zones already that shallow are left as they are.
-  assert.doesNotMatch(block, /--ahtb-trigger:|--ahtb-bm-trigger:/);
-  // The hidden bookmarks bar's zero zone still wins: its rule is more specific.
-  assert.ok(css.indexOf(":root:has(#PersonalToolbar[collapsed]") < at);
-  assert.ok(!generateCss(defaults()).includes(unseen));
+  assert.equal(ruleFor(generateCss({ ...defaults(), position: "top", toolbarAutoHide: true, toolbarTriggerSize: 10 }), "#navigator-toolbox"), null);
+  // The wiped toolbar's strip along the edge.
+  const wipe = generateCss({ ...defaults(), position: "bottom", toolbarAutoHide: true, toolbarTriggerSize: 40, triggerSize: 8 });
+  assert.ok(ruleFor(wipe, "#navigator-toolbox::before").includes("clip-path: polygon(0 0, 100% 0, 100% 10px, 75% 10px, 75% 100%, 25% 100%, 25% 10px, 0 10px)"));
+  // The side tab bar, on either side, and strips: the cut follows the bar out as it opens.
+  const side = generateCss({ ...defaults(), position: "left", triggerSize: 40 });
+  const left = ruleFor(side, "#sidebar-container:not([sidebar-positionend])");
+  assert.ok(left.includes(`min(${zone("var(--ahtb-trigger)", SIDE_GROWTH)}, 10px)`));
+  assert.ok(left.includes(`${OPENNESS} * (calc(100% + 40px) - `));
+  assert.ok(ruleFor(side, "#sidebar-container[sidebar-positionend]").includes(`${OPENNESS} * (calc(-1 * 40px) - `));
+  assert.equal(ruleFor(generateCss({ ...defaults(), position: "left", triggerSize: 10 }), "#sidebar-container:not([sidebar-positionend])"), null);
+  const strip = generateCss({ ...defaults(), position: "bottom", triggerSize: 40 });
+  assert.ok(ruleFor(strip, "#TabsToolbar").includes("clip-path: polygon(calc(-1 * 40px) calc(100% + 40px), calc(100% + 40px) calc(100% + 40px), "));
+  const inToolbox = generateCss({ ...defaults(), position: "top", bookmarksAutoHide: true, bookmarksTriggerSize: 30 });
+  assert.ok(ruleFor(inToolbox, "#PersonalToolbar").includes("clip-path: polygon(calc(-1 * 40px) calc(-1 * 40px), "));
+  assert.ok(!generateCss(defaults()).includes(UNSEEN + " "));
   // The two signals are told apart by title.
   assert.notEqual(SIGNALS.hold, SIGNALS.blind);
   for (const title of Object.values(SIGNALS)) assert.match(title, /^[\w :]+$/, "safe inside a CSS attribute selector");

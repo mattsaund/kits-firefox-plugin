@@ -14,8 +14,9 @@ export const CLICK_THROUGH_ACCESS = { origins: ["<all_urls>"] };
  *          zones let it through to the page.
  *   blind: the page script can't run here (another extension's page such as
  *          a new tab page, or one of Firefox's own), so nothing near the edge
- *          can be seen; the hover zones shrink to Kits' default 10px
- *          instead (BLIND_ZONE in generate-css.js).
+ *          can be seen; near the window's corners, where such pages put
+ *          their buttons, the hover zones shrink to Kits' default 10px
+ *          (BLIND_ZONE and BLIND_CORNER in generate-css.js).
  */
 export const SIGNALS = {
   hold: "Kits: clicks go through",
