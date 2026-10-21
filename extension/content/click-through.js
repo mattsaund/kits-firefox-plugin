@@ -26,25 +26,8 @@
   // This close to a hover zone, what lies under the zone counts too, so
   // something inside the zone can be reached before the zone takes the pointer. (px)
   const REACH = 40;
-  // Overshooting toward the edge, the pointer may stray this far to either side
-  // of the clickable thing it came from and still count as heading for it. (px)
-  const SLACK = 12;
-  // ...and go this far past it toward the edge. Further than that, it is
-  // heading for the bar instead, unless the thing is this close to the edge. (px)
-  const OVERSHOOT = 24;
-  // After the pointer moves off a clickable thing, the hover zones stay open to
-  // the page this long, so crossing a gap between two links doesn't open the
-  // bar. It counts from the moment the pointer moved off: moving on doesn't
-  // put it off, or a pointer sliding slowly to empty space would hold the
-  // zones open until it stopped. (ms)
-  const GRACE = 250;
-  // After the pointer leaves the page past a clickable thing by the edge, the
-  // hover zones come back this long after. The wait covers overshooting past
-  // the window edge (on macOS, into the menu bar above a maximized window) and
-  // coming straight back. (ms)
-  const AWAY = 800;
-  // Resting in a hover zone this long, off anything clickable, opens the bar
-  // after all. (ms)
+  // Resting this long in a hover zone, short of something clickable inside it,
+  // opens the bar after all. (ms)
   const DWELL = 700;
   // Things bigger than this share of the window are page-sized containers made
   // clickable as a whole, which would keep the bars shut everywhere.
@@ -73,8 +56,6 @@
 
   let zones = []; // [{ edge, size }] from the settings, see edgeZones()
   let held = false; // what the background script was last told
-  let lane = null; // { edge, rect() }: the clickable thing being held for
-  let releaseTimer = 0;
   let dwellTimer = 0;
   let dwellDone = false;
   let pointer = null; // the latest pointer position on the page
@@ -108,28 +89,9 @@
     return [innerWidth - 1 - depth, y];
   }
 
-  /** How deep a box reaches into the page from an edge of the window. */
-  function boxReach(edge, r) {
-    return boxDistance(edge, r) + (edge === "top" || edge === "bottom" ? r.height : r.width);
-  }
-
-  /**
-   * Where the pointer is next to a clickable thing near an edge: on it, just
-   * past it toward the edge (all the way, for a thing by the edge), or slightly
-   * beside or below it ("slack"), or else past it toward the edge, heading for
-   * the bar ("past"), or somewhere else (null).
-   */
-  function laneAt({ edge, rect }, x, y) {
-    const r = rect();
-    const across = edge === "top" || edge === "bottom" ? x >= r.left - SLACK && x <= r.right + SLACK : y >= r.top - SLACK && y <= r.bottom + SLACK;
-    const depth = distance(edge, x, y);
-    if (!across || depth > boxReach(edge, r) + SLACK) return null;
-    return depth >= boxDistance(edge, r) - OVERSHOOT ? "in" : "past";
-  }
-
-  /** Whether overshooting a clickable thing can carry the pointer right up to its edge. */
-  function byTheEdge({ edge, rect }) {
-    return boxDistance(edge, rect()) < OVERSHOOT;
+  /** Whether a point lies between a box and an edge of the window: past the box, toward the edge. */
+  function pastBox(edge, r, x, y) {
+    return distance(edge, x, y) < boxDistance(edge, r);
   }
 
   // ---------------------------------------------------------------------------
@@ -195,8 +157,8 @@
   // Deciding
   // ---------------------------------------------------------------------------
 
-  /** Tells the background script, once per change. */
-  function send(hold) {
+  /** Holds the hover zones open to the page or lets them go, telling the background script once per change. */
+  function setHold(hold) {
     if (held === hold) return;
     held = hold;
     browser.runtime.sendMessage({ type: "click-through", hold }).catch(() => {
@@ -204,31 +166,30 @@
     });
   }
 
-  /**
-   * Holds the hover zones open to the page, or lets them back after `delay`
-   * ms. A release already on its way keeps its time (see GRACE).
-   */
-  function setHold(hold, delay = 0) {
-    if (hold || delay === 0) {
-      clearTimeout(releaseTimer);
-      releaseTimer = 0;
-      send(hold);
-    } else if (held && !releaseTimer) {
-      releaseTimer = setTimeout(() => {
-        releaseTimer = 0;
-        send(false);
-      }, delay);
-    }
+  /** Starts the rest timer (see DWELL), unless it is running already. */
+  function startDwell() {
+    dwellTimer ||= setTimeout(() => {
+      dwellDone = true;
+      setHold(false);
+    }, DWELL);
+  }
+
+  function stopDwell() {
+    clearTimeout(dwellTimer);
+    dwellTimer = 0;
   }
 
   function reset() {
-    lane = null;
-    clearTimeout(dwellTimer);
-    dwellTimer = 0;
+    stopDwell();
     dwellDone = false;
   }
 
-  /** Looks at the pointer's position and holds or lets go. */
+  /**
+   * Looks at the pointer's position and holds or lets go. The hover zones let
+   * the pointer through while it is on something clickable near an edge, or on
+   * its way up to something clickable inside a zone. Anywhere else, including
+   * past that thing toward the edge, they take it back at once and the bar opens.
+   */
   function evaluate(x, y) {
     const watched = zones.filter((z) => distance(z.edge, x, y) < z.size + WATCH);
     if (!watched.length) {
@@ -237,52 +198,36 @@
       return;
     }
 
-    const target = targetAt(x, y);
-    const inZone = watched.find((z) => distance(z.edge, x, y) < z.size);
-
-    // Resting in a hover zone, off anything clickable, opens the bar after all.
-    if (inZone && !target) {
-      dwellTimer ||= setTimeout(() => {
-        dwellDone = true;
-        setHold(false);
-      }, DWELL);
-    } else {
-      clearTimeout(dwellTimer);
-      dwellTimer = 0;
-      // Out of every zone's reach again: holding is possible once more.
-      if (!watched.some((z) => distance(z.edge, x, y) < z.size + REACH)) dwellDone = false;
+    // After resting opened the bar (see DWELL), hold again only once the
+    // pointer has been out of every zone's reach.
+    if (dwellDone) {
+      if (watched.some((z) => distance(z.edge, x, y) < z.size + REACH)) return;
+      dwellDone = false;
     }
-    if (dwellDone) return;
 
     // On something clickable near an edge.
-    if (target) {
-      const near = watched.find((z) => boxDistance(z.edge, target()) < z.size + NEAR);
-      if (near) {
-        lane = { edge: near.edge, rect: target };
-        setHold(true);
-        return;
-      }
-    }
-    // Overshooting from it toward the edge.
-    const fromLane = lane && laneAt(lane, x, y);
-    if (fromLane === "in") {
+    const target = targetAt(x, y);
+    if (target && watched.some((z) => boxDistance(z.edge, target()) < z.size + NEAR)) {
+      stopDwell();
       setHold(true);
       return;
     }
-    lane = null;
-    // Almost at a hover zone with something clickable under it.
+    // Almost at a hover zone with something clickable under it, and not past
+    // that thing toward the edge: on the way to it. Resting inside the zone
+    // there opens the bar after all.
     for (const zone of watched) {
-      if (distance(zone.edge, x, y) >= zone.size + REACH) continue;
+      const depth = distance(zone.edge, x, y);
+      if (depth >= zone.size + REACH) continue;
       const underZone = targetAt(...pointInZone(zone, x, y));
-      if (underZone) {
-        lane = { edge: zone.edge, rect: underZone };
+      if (underZone && !pastBox(zone.edge, underZone(), x, y)) {
+        if (depth < zone.size) startDwell();
+        else stopDwell();
         setHold(true);
         return;
       }
     }
-    // Gone well past it toward the edge, the pointer is after the bar: let it
-    // through at once. Off to the side, it may be crossing to the next link.
-    setHold(false, fromLane === "past" ? 0 : GRACE);
+    stopDwell();
+    setHold(false);
   }
 
   // ---------------------------------------------------------------------------
@@ -301,12 +246,12 @@
     if (pointer && zones.length) evaluate(...pointer);
   }
 
-  // The pointer left the page: out of the window, or onto Firefox's own UI.
+  // The pointer left the page: out of the window, onto Firefox's own UI or
+  // into a frame this script doesn't watch.
   function onPointerOut(e) {
     if (e.relatedTarget && !/^(iframe|frame|object|embed)$/i.test(e.relatedTarget.localName)) return;
     pointer = null;
-    if (e.relatedTarget) setHold(false, GRACE);
-    else setHold(false, lane && byTheEdge(lane) ? AWAY : 0);
+    setHold(false);
   }
 
   function stop() {

@@ -3,6 +3,19 @@
 Each version is a `v` tag, with the extension and helper on its
 [release page](https://github.com/mattsaund/kits-firefox-plugin/releases).
 
+## 0.5.0 (2026-10-21)
+
+- **The bar opens as soon as the pointer leaves a button.** With **Let
+  clicks through to the page** on, pointing at a link or button near the
+  edge still lets you click it, and so does coming up onto one from below
+  when it sits inside the hover zone. Move above it, toward the edge, or off
+  to the side, and the bar opens at once. Before, the bar waited a quarter
+  of a second after the pointer left a button, and above a button by the
+  edge it stayed shut until the pointer rested there.
+- Fixed: right after using a bar, going straight back to a button inside
+  its hover zone could open the bar over the button.
+- No Apply or helper update needed: updating is enough.
+
 ## 0.4.9 (2026-10-21)
 
 - **Fixed: a pause after moving off a button by the edge.** With **Let
