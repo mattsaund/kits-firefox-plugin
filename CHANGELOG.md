@@ -3,7 +3,18 @@
 Each version is a `v` tag, with the extension and helper on its
 [release page](https://github.com/mattsaund/kits-firefox-plugin/releases).
 
-## 0.4.8 — 2026-10-16
+## 0.4.9 (2026-10-21)
+
+- **Fixed: a pause after moving off a button by the edge.** With **Let
+  clicks through to the page** on, sliding the pointer slowly from a link or
+  button near the edge to empty space kept the bar shut for most of a
+  second, and sometimes it only opened once the mouse moved again. Now the
+  bar opens a quarter of a second after the pointer leaves the button, even
+  if the pointer has stopped. Crossing the gap between two links still
+  doesn't open it.
+- Press **Apply** after updating. No helper update needed.
+
+## 0.4.8 (2026-10-16)
 
 - **Full hover zones on Tabliss and other pages Kits can't see into.** 0.4.7
   shrank every hover zone to 10px along the whole edge on those pages, so
@@ -14,7 +25,7 @@ Each version is a `v` tag, with the extension and helper on its
   depth.
 - Press **Apply** after updating. No helper update needed.
 
-## 0.4.7 — 2026-10-15
+## 0.4.7 (2026-10-15)
 
 - **Profiles.** Save everything on the settings page under a name, together
   with your Firefox theme, and switch between them. Using a profile loads its
@@ -38,7 +49,7 @@ Each version is a `v` tag, with the extension and helper on its
   isn't confused with the new profiles.
 - Press **Apply** after updating. No helper update needed.
 
-## 0.4.6 — 2026-10-15
+## 0.4.6 (2026-10-15)
 
 - **The search bar's outline color is easier to find.** The setting for the
   colored ring around the address bar when you click in it is now called
@@ -46,7 +57,7 @@ Each version is a `v` tag, with the extension and helper on its
   and pick a color. It used to be called "Outline while typing".
 - Press **Apply** after updating. No helper update needed.
 
-## 0.4.5 — 2026-10-13
+## 0.4.5 (2026-10-13)
 
 - **Fixed: bars stuck open.** Firefox's tab previews (the card that shows
   when you rest on a tab) can leave a tab marked as if a popup were open on
@@ -60,7 +71,7 @@ Each version is a `v` tag, with the extension and helper on its
   keeps the rest.
 - Press **Apply** after updating. No helper update needed.
 
-## 0.4.4 — 2026-10-13
+## 0.4.4 (2026-10-13)
 
 - **Passing over a link on the way to the edge no longer slows the bar
   down.** With **Let clicks through to the page** on, heading past a link or
@@ -73,7 +84,7 @@ Each version is a `v` tag, with the extension and helper on its
 - The README opens with screenshots of the bars hidden and open.
 - Press **Apply** after updating. No helper update needed.
 
-## 0.4.3 — 2026-10-13
+## 0.4.3 (2026-10-13)
 
 - **Fixed: the toolbar shook over the window buttons** (close, minimize,
   zoom) on macOS, making them hard to click. It stays still now.
@@ -81,7 +92,7 @@ Each version is a `v` tag, with the extension and helper on its
 - A bar whipped open at the screen edge still opens all the way.
 - Press **Apply** after updating. No helper update needed.
 
-## 0.4.2 — 2026-10-13
+## 0.4.2 (2026-10-13)
 
 - **Whipping the pointer to an edge opens the bar all the way.** Pushing
   against the screen edge counts as leaving Firefox, which used to freeze a
@@ -90,7 +101,7 @@ Each version is a `v` tag, with the extension and helper on its
 - Shorter README, with pictures.
 - Press **Apply** after updating. No helper update needed.
 
-## 0.4.1 — 2026-10-12
+## 0.4.1 (2026-10-12)
 
 - **Put the bookmarks bar on the top or bottom**, with the toolbar or on the
   other edge.
@@ -105,7 +116,7 @@ Each version is a `v` tag, with the extension and helper on its
   zone was clipped away.
 - Press **Apply** after updating. No helper update needed.
 
-## 0.4.0 — 2026-10-12
+## 0.4.0 (2026-10-12)
 
 - **Let clicks through to the page**, a new switch under Behavior. Pointing
   at a link or button near an edge, like a site's profile picture in the top
@@ -127,7 +138,7 @@ Each version is a `v` tag, with the extension and helper on its
 - **Run the install command again** to update the helper, then press
   **Apply**. The settings page reminds you.
 
-## 0.3.5 — 2026-10-12
+## 0.3.5 (2026-10-12)
 
 - **Old userChrome.css edits no longer get in the way.** Anything else in
   `userChrome.css`, like a hand-written auto-hide sidebar from before, used
@@ -150,7 +161,7 @@ Each version is a `v` tag, with the extension and helper on its
 - **Run the install command again** to update the helper; the settings page
   reminds you. Then press Apply.
 
-## 0.3.2 — 2026-10-11
+## 0.3.2 (2026-10-11)
 
 - **The update Download button installs the update.** It used to open an
   empty tab that Firefox never installed from, which looks like a black
@@ -165,14 +176,14 @@ Each version is a `v` tag, with the extension and helper on its
 - Coming from 0.3.1 or earlier: that version's Download button still opens
   the empty tab. Instead, click the `.xpi` file on this release page.
 
-## 0.3.1 — 2026-10-11
+## 0.3.1 (2026-10-11)
 
 - **New icon:** a yellow-orange `.>.` turned upside down, on the toolbar
   button and everywhere else.
 - No new helper needed: the settings page only asks for a helper update
   when a release changes it.
 
-## 0.3.0 — 2026-10-11
+## 0.3.0 (2026-10-11)
 
 - **Bars stay put when the pointer leaves Firefox's sight.** Pushing against
   the screen edge, opening a right-click menu, reaching for the window
@@ -194,13 +205,13 @@ Each version is a `v` tag, with the extension and helper on its
   about:addons) and are skipped without it.
 - The helper refuses stylesheets that could load other files.
 
-## 0.2.1 — 2026-10-11
+## 0.2.1 (2026-10-11)
 
 - **Signed by Mozilla**, so regular Firefox installs it permanently.
 - Renamed to **Kits Editor for Firefox**: Mozilla only allows "Firefox" in
   an add-on's name as "… for Firefox".
 
-## 0.2.0 — 2026-10-11
+## 0.2.0 (2026-10-11)
 
 - **Windows.** A PowerShell one-liner installs the helper and registers it
   with Firefox; `-Uninstall` removes it. The helper finds your Firefox
@@ -213,7 +224,7 @@ Each version is a `v` tag, with the extension and helper on its
 - After updating the extension, run the install command again to update the
   helper. The settings page reminds you.
 
-## 0.1.0 — 2026-10-11
+## 0.1.0 (2026-10-11)
 
 First release.
 

@@ -91,12 +91,28 @@ const SHADOW = `filter: drop-shadow(0 0 calc(12px * ${OPENNESS}) rgba(0, 0, 0, c
 // script show this address bar icon on that tab (content/click-through.js). A
 // page action is the one piece of per-tab state an extension can set that
 // appears in Firefox's own markup, so it serves as the signal; the icon itself
-// is never displayed. Its title says which signal it is (see SIGNALS): with
-// "hold", the hover zones let the pointer through; with "blind", the page
-// can't be seen into and the hover zones shrink to BLIND_ZONE.
+// is never seen (see SIGNAL_BOX). Its title says which signal it is (see
+// SIGNALS): with "hold", the hover zones let the pointer through; with
+// "blind", the page can't be seen into and near the corners the hover zones
+// keep only BLIND_ZONE (see BLIND_CORNER).
 const PAGE_ACTION = "#pageAction-urlbar-autohide-tab-bar_kits";
 const PAGE_WANTS_POINTER = `:has(${PAGE_ACTION}[tooltiptext="${SIGNALS.hold}"])`;
 const PAGE_UNSEEN = `:has(${PAGE_ACTION}[tooltiptext="${SIGNALS.blind}"])`;
+
+// The signal's icon, as an empty box that takes no room and can't be seen or
+// pointed at. It stays in the layout instead of being display: none, so
+// Firefox showing or hiding it changes the layout, and after a layout change
+// Firefox checks again what is under the pointer. Without that, a hover zone
+// taking the pointer back while the pointer rests on it wouldn't open its bar
+// until the pointer moved.
+const SIGNAL_BOX = [
+  "position: absolute",
+  "width: 0",
+  "height: 0",
+  "overflow: hidden",
+  "visibility: hidden",
+  "pointer-events: none",
+];
 
 // Hover zones on pages the page script can't see into (PAGE_UNSEEN), where
 // Kits can't tell a button from empty space. Those pages keep their buttons
@@ -181,8 +197,8 @@ function rules(s) {
   blocks.push(...bookmarksRules(s));
   blocks.push(...pageEdgeRules(s));
   if (s.reducedMotion && (s.autoHide || s.toolbarAutoHide || s.bookmarksAutoHide)) blocks.push(reducedMotionRule(s));
-  blocks.push(`/* The signal from "Let clicks through to the page" (see PAGE_ACTION); never shown. */
-${rule(PAGE_ACTION, ["display: none"])}`);
+  blocks.push(`/* The signal from "Let clicks through to the page" (see PAGE_ACTION); never seen (see SIGNAL_BOX). */
+${rule(PAGE_ACTION, SIGNAL_BOX)}`);
   return blocks.join("\n\n") + "\n";
 }
 

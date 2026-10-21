@@ -33,7 +33,10 @@
   // heading for the bar instead, unless the thing is this close to the edge. (px)
   const OVERSHOOT = 24;
   // After the pointer moves off a clickable thing, the hover zones stay open to
-  // the page this long, so crossing a gap between two links doesn't open the bar. (ms)
+  // the page this long, so crossing a gap between two links doesn't open the
+  // bar. It counts from the moment the pointer moved off: moving on doesn't
+  // put it off, or a pointer sliding slowly to empty space would hold the
+  // zones open until it stopped. (ms)
   const GRACE = 250;
   // After the pointer leaves the page past a clickable thing by the edge, the
   // hover zones come back this long after. The wait covers overshooting past
@@ -201,11 +204,21 @@
     });
   }
 
-  /** Holds the hover zones open to the page, or lets them back after `delay` ms. */
+  /**
+   * Holds the hover zones open to the page, or lets them back after `delay`
+   * ms. A release already on its way keeps its time (see GRACE).
+   */
   function setHold(hold, delay = 0) {
-    clearTimeout(releaseTimer);
-    if (hold || delay === 0) send(hold);
-    else if (held) releaseTimer = setTimeout(() => send(false), delay);
+    if (hold || delay === 0) {
+      clearTimeout(releaseTimer);
+      releaseTimer = 0;
+      send(hold);
+    } else if (held && !releaseTimer) {
+      releaseTimer = setTimeout(() => {
+        releaseTimer = 0;
+        send(false);
+      }, delay);
+    }
   }
 
   function reset() {

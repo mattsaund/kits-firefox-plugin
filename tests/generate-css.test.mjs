@@ -152,7 +152,7 @@ test("right side mirrors the margins onto the start edge", () => {
   assert.ok(css.includes(`margin-inline-start: calc(-1 * ${zone("var(--ahtb-trigger)", SIDE_GROWTH)} - ${OPENNESS} * (${SIDE_GROWTH}))`));
 });
 
-test("push mode keeps the footprint growing instead of cancelling it", () => {
+test("push mode keeps the footprint growing instead of canceling it", () => {
   const css = generateCss({ ...defaults(), overlay: false });
   assert.ok(!css.includes("calc(var(--ahtb-collapsed) - var(--ahtb-expanded) - var(--ahtb-trigger))"));
 });
@@ -476,8 +476,15 @@ test("pointing at something clickable near an edge lets the pointer through ever
     const css = generateCss(s);
     const L = barLayout(s);
     const label = `${s.position} autoHide=${s.autoHide} toolbar=${s.toolbarPosition} toolbarAutoHide=${s.toolbarAutoHide} bookmarks=${s.bookmarksPosition}`;
-    // The page action is only a signal; its icon is never shown.
-    assert.match(css, /#pageAction-urlbar-autohide-tab-bar_kits \{\n  display: none !important;/, label);
+    // The page action is only a signal; its icon is never seen. It stays in
+    // the layout (never display: none), so showing or hiding it makes Firefox
+    // check again what is under a pointer at rest (see SIGNAL_BOX).
+    const box = css.slice(css.indexOf("#pageAction-urlbar-autohide-tab-bar_kits {"));
+    const boxRule = box.slice(0, box.indexOf("}"));
+    for (const d of ["position: absolute", "width: 0", "height: 0", "visibility: hidden", "pointer-events: none"]) {
+      assert.ok(boxRule.includes(`  ${d} !important;`), `${label}: signal box lacks ${d}`);
+    }
+    assert.ok(!boxRule.includes("display:"), `${label}: signal box must stay in the layout`);
     const through = (target) => css.indexOf(`${signal} ${target} {\n  pointer-events: none !important;`);
     if (s.autoHide && isVertical(s.position)) assert.ok(through("#sidebar-container") > 0, label);
     if (L.hiding.tabs === "own") assert.ok(through("#TabsToolbar") > 0, label);
