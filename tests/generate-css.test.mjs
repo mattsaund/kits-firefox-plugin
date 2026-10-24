@@ -735,3 +735,17 @@ test("extension buttons can take the toolbar button color, as their icons' shape
   assert.ok(!generateCss({ ...defaults(), toolbarIconCustom: true }).includes(icon));
   assert.ok(!generateCss({ ...defaults(), toolbarIconExtensions: true }).includes(icon));
 });
+
+test("with the toolbar floating over the page, going fullscreen from a maximized window still resizes the page", () => {
+  const block = '@media (-moz-platform: linux), (-moz-platform: windows) {\n  :root[sizemode="maximized"]:not([inFullscreen]) #tabbrowser-tabbox {\n    margin-bottom: 1px !important;\n  }\n}';
+  for (const s of variants()) {
+    const css = generateCss(s);
+    const label = `${s.position} toolbar=${s.toolbarPosition} toolbarAutoHide=${s.toolbarAutoHide}`;
+    // Only an auto-hiding toolbar floats over the page; otherwise going
+    // fullscreen hides it and the page grows anyway.
+    assert.equal(css.includes(block), s.toolbarAutoHide, label);
+    // Never on #browser, whose margins keep the page clear of bars fixed to
+    // the other edge (see fixedStrips).
+    assert.ok(!css.includes('[sizemode="maximized"]:not([inFullscreen]) #browser'), label);
+  }
+});

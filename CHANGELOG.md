@@ -3,6 +3,16 @@
 Each version is a `v` tag, with the extension and helper on its
 [release page](https://github.com/mattsaund/kits-firefox-plugin/releases).
 
+## 0.5.1 (2026-10-24)
+
+- **Fixed: fullscreen videos stayed small in a maximized window.** With the
+  toolbar auto-hiding, a maximized Firefox window that fills the whole
+  screen (no title bar, a panel that hides) kept the same size going
+  fullscreen, so YouTube's player stayed small in the top-left corner. Now,
+  while the window is maximized, the page stops 1px short of its bottom, so
+  going fullscreen resizes the page. Not on macOS, which doesn't need it.
+- Press **Apply** after updating. No helper update needed.
+
 ## 0.5.0 (2026-10-21)
 
 - **The bar opens as soon as the pointer leaves a button.** With **Let

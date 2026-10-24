@@ -874,6 +874,20 @@ ${rule(TB, ["order: 1"])}`);
 
   if (!s.toolbarAutoHide) return blocks;
 
+  // Floating over the page, the toolbox leaves it the whole window. In a
+  // maximized window as big as the screen (no title bar, a panel that hides)
+  // the page then has the same size in fullscreen, so going fullscreen isn't
+  // a resize, and pages that wait for one to fill the screen keep their old
+  // layout: YouTube's player stays small in the top-left corner. Keeping the
+  // page 1px short of the bottom of a maximized window makes it one. The 1px
+  // is on the page's own box: Kits may give #browser margins of its own (see
+  // fixedStrips). A maximized macOS window never covers the menu bar, so
+  // fullscreen always resizes there.
+  blocks.push(`/* Going fullscreen from a maximized window resizes the page (see toolbarRules). */
+@media (-moz-platform: linux), (-moz-platform: windows) {
+${indent(rule(':root[sizemode="maximized"]:not([inFullscreen]) #tabbrowser-tabbox', ["margin-bottom: 1px"]))}
+}`);
+
   const trigger = "var(--ahtb-toolbar-trigger)";
   const rows = `:is(${L.rows.join(", ")})`;
   const menuList = [
